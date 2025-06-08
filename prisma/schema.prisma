@@ -1,0 +1,803 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Usuarios y autenticación ===
+
+model User {
+  id                    Int                   @id @default(autoincrement()) // ID único del usuario
+  name                  String // Nombre completo
+  lastName              String? // Apellido (opcional)
+  username              String?               @unique // Username (opcional)
+  email                 String                @unique // Correo electrónico
+  password              String // Contraseña hasheada
+  roleId                Int // Rol del usuario
+  role                  Role                  @relation(fields: [roleId], references: [id])
+  referralCode          String                @unique // Código de referido
+  isActive              Boolean               @default(true) // Activo o no
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @default(now())
+  seller                Seller? // Vendedor asociado
+  commissions           Commission[]
+  withdrawals           WithdrawalRequest[]
+  auditLogs             AuditLog[]
+  recoveryToken         String?
+  recoveryExpires       DateTime?
+  entityChanges         EntityChangeLog[]     @relation("EntityChangedBy")
+  referralsSent         Referral[]            @relation("Referrer")
+  referralsRecv         Referral[]            @relation("Referred")
+  notifications         Notification[]
+  loginAttempts         LoginAttempt[]
+  providers             UserProvider[]
+  sales                 Sale[]
+  productPriceHistories ProductPriceHistory[] @relation("ProductPriceHistoryChangedBy")
+
+  // Auditoría extendida (opcional)
+  createdBy     Int?
+  updatedBy     Int?
+  createdByUser User? @relation("UserCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User? @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
+
+  createdUsers User[] @relation("UserCreatedBy")
+  updatedUsers User[] @relation("UserUpdatedBy")
+}
+
+model Role {
+  id          Int      @id @default(autoincrement()) // ID del rol
+  name        RoleName @unique // Nombre (admin, vendedor, etc.)
+  description String // Descripción del rol
+  users       User[]
+}
+
+enum RoleName {
+  SUPERADMIN
+  ADMIN
+  SELLER
+  RECRUITER
+  STOCK
+  MARKETING
+}
+
+model Seller {
+  id           Int      @id @default(autoincrement()) // ID del vendedor
+  userId       Int      @unique // FK al usuario
+  user         User     @relation(fields: [userId], references: [id])
+  ruc          String?  @unique // RUC del negocio
+  businessName String? // Razón social
+  storeName    String? // Nombre comercial
+  description  String? // Descripción de la tienda
+  logoUrl      String? // URL del logo
+  isVerified   Boolean  @default(false) // Verificación del vendedor
+  createdAt    DateTime @default(now())
+}
+
+model SellerRequest {
+  id             Int                 @id @default(autoincrement())
+  email          String?             @unique
+  phone          String?             @unique
+  name           String
+  message        String?
+  status         SellerRequestStatus @default(PENDING) // PENDING | APPROVED | REJECTED
+  createdAt      DateTime            @default(now())
+  creationToken  String?             @unique // Token único para la solicitud
+  tokenExpiresAt DateTime?
+  approvedAt     DateTime? // Fecha si fue aprobado
+  completedAt    DateTime? // Fecha completada la aprobacion  
+  rejectedAt     DateTime? // Fecha si fue rechazado
+}
+
+enum SellerRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// === Clientes y actividad ===
+
+model Customer {
+  id                  Int                   @id @default(autoincrement()) // ID del cliente
+  name                String // Nombre del cliente
+  email               String?               @unique // Correo electrónico
+  phone               String                @unique // Teléfono de contacto
+  createdAt           DateTime              @default(now()) // Fecha de registro
+  logs                CustomerActivityLog[] // Acciones realizadas por el cliente
+  addresses           Address[] // Direcciones asociadas
+  password            String? // Contraseña hasheada (opcional, si se usa autenticación)
+  sales               Sale[] // Compras realizadas
+  isTemporaryPassword Boolean               @default(false)
+  wishlists           Wishlist[] // Lista de deseos
+  reviews             ProductReview[] // Opiniones de productos
+  cartSession         CartSession[] // Carritos de compra
+}
+
+model CustomerActivityLog {
+  id         Int      @id @default(autoincrement()) // ID del log
+  customerId Int // FK al cliente
+  customer   Customer @relation(fields: [customerId], references: [id])
+  action     String // Acción ejecutada (ej. 'LOGIN')
+  metadata   String // Datos adicionales en texto plano o JSON
+  createdAt  DateTime @default(now()) // Fecha del evento
+}
+
+model Address {
+  id          Int      @id @default(autoincrement()) // ID de la dirección
+  customerId  Int // FK al cliente
+  customer    Customer @relation(fields: [customerId], references: [id])
+  addressLine String // Calle y número
+  district    String // Distrito
+  city        String // Ciudad o provincia
+  phone       String // Teléfono asociado
+}
+
+// === Catálogo de productos ===
+
+model Category {
+  id         Int         @id @default(autoincrement()) // ID de la categoría
+  name       String      @unique // Nombre (Ej. Celulares)
+  products   Product[] // Productos de esta categoría
+  isDeleted  Boolean     @default(false) // Si está eliminada
+  attributes Attribute[] // Atributos relacionados
+  createdAt  DateTime    @default(now()) // Fecha de creación
+  updatedAt  DateTime    @default(now()) // Fecha de actualización
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement()) // ID de la marca
+  name      String    @unique // Nombre (Ej. Apple, Samsung)
+  isDeleted Boolean   @default(false) // Si está eliminada
+  products  Product[] // Productos de esta marca
+  createdAt DateTime  @default(now()) // Fecha de creación
+  updatedAt DateTime  @default(now()) // Fecha de actualización
+}
+
+model ProductPriceHistory {
+  id        Int      @id @default(autoincrement()) // ID único
+  productId Int // Producto relacionado
+  price     Float // Precio registrado
+  changedAt DateTime @default(now()) // Fecha de cambio
+  reason    String? // Motivo del cambio
+  changedBy Int? // Usuario que hizo el cambio
+
+  user User? @relation("ProductPriceHistoryChangedBy", fields: [changedBy], references: [id])
+}
+
+model Product {
+  id              Int                 @id @default(autoincrement()) // ID del producto general
+  title           String // Título visible al cliente
+  description     String // Descripción completa
+  price           Float // Precio base de referencia
+  stock           Int // Stock total (si no se usa variantes)
+  categoryId      Int // FK a categoría
+  brandId         Int // FK a marca
+  isActive        Boolean             @default(true) // Está habilitado en tienda
+  isPreorder      Boolean             @default(false) // Si está disponible en preventa
+  commissionType  CommissionType // Tipo de comisión ('fixed', 'percent')
+  commissionValue Float // Valor de la comisión
+  status          ProductStatus       @default(ACTIVE)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @default(now())
+  category        Category            @relation(fields: [categoryId], references: [id])
+  brand           Brand               @relation(fields: [brandId], references: [id])
+  images          ProductImage[] // Galería de imágenes
+  items           ProductItem[] // Ítems únicos si aplica
+  attributes      ProductAttribute[] // Atributos asignados
+  variants        ProductVariant[] // Variantes con stock propio
+  tags            ProductTag[] // Etiquetas de búsqueda
+  reviews         ProductReview[] // Opiniones de clientes
+  wishlists       Wishlist[] // Clientes que lo tienen en wishlist
+  cartItems       CartItem[] // En carritos
+  sales           Sale[] // Ventas relacionadas
+  inventoryMoves  InventoryMovement[] // Movimientos de inventario
+  costDetails     ProductCostDetail[] // Detalles de costo adicionales
+  PurchaseItem    PurchaseItem[]
+}
+
+enum ProductStatus {
+  ACTIVE
+  OUT_OF_STOCK
+  DISABLED
+  DELETED
+  PAUSED
+}
+
+enum CommissionType {
+  FIXED // Monto fijo por venta
+  PERCENT // Porcentaje del precio de venta
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement()) // ID de la imagen
+  productId Int // FK al producto
+  product   Product @relation(fields: [productId], references: [id])
+  imageUrl  String // URL de la imagen
+  isPrimary Boolean @default(false) // Si es imagen principal
+}
+
+model ProductItem {
+  id                Int                 @id @default(autoincrement()) // ID del ítem único
+  productId         Int // FK al producto padre
+  product           Product             @relation(fields: [productId], references: [id])
+  serialCode        String              @unique // Código de serie (único por ítem)
+  imageUrl          String // Imagen del producto específico
+  condition         String // Estado físico (ej. 'como nuevo')
+  functionality     String // Estado funcional (ej. '100% operativa')
+  available         Boolean             @default(true) // Disponible para venta
+  cost              Float // Costo del producto
+  salePrice         Float // Precio de venta asignado
+  sold              Boolean             @default(false) // Si ya fue vendido
+  createdAt         DateTime            @default(now()) // Fecha de ingreso
+  ProductCostDetail ProductCostDetail[]
+  Sale              Sale[]
+}
+
+model Attribute {
+  id               Int                @id @default(autoincrement()) // ID del atributo
+  name             String // Nombre del atributo (Ej. Color)
+  categoryId       Int // Categoría a la que pertenece
+  category         Category           @relation(fields: [categoryId], references: [id])
+  values           AttributeValue[] // Valores posibles
+  ProductAttribute ProductAttribute[]
+  VariantAttribute VariantAttribute[]
+}
+
+model AttributeValue {
+  id               Int                @id @default(autoincrement()) // ID del valor
+  attributeId      Int // FK al atributo
+  attribute        Attribute          @relation(fields: [attributeId], references: [id])
+  value            String // Valor concreto (Ej. 'Rojo')
+  ProductAttribute ProductAttribute[]
+  VariantAttribute VariantAttribute[]
+}
+
+model ProductAttribute {
+  id          Int            @id @default(autoincrement()) // ID del vínculo
+  productId   Int // FK al producto
+  attributeId Int // FK al atributo
+  valueId     Int // FK al valor
+  product     Product        @relation(fields: [productId], references: [id])
+  attribute   Attribute      @relation(fields: [attributeId], references: [id])
+  value       AttributeValue @relation(fields: [valueId], references: [id])
+}
+
+// === Inventario y costos ===
+
+model InventoryMovement {
+  id         Int                         @id @default(autoincrement()) // ID del movimiento
+  productId  Int // FK al producto
+  product    Product                     @relation(fields: [productId], references: [id])
+  sourceType InventoryMovementSourceType // Origen del movimiento ('purchase', 'sale', etc.)
+  sourceId   Int // ID de la fuente (ej. ID de compra o venta)
+  quantity   Int // Cantidad movida
+  direction  InventoryMovementDirection // Dirección ('IN', 'OUT')
+  reason     String // Razón o comentario del movimiento
+  createdAt  DateTime                    @default(now()) // Fecha del movimiento
+}
+
+enum InventoryMovementDirection {
+  IN
+  OUT
+}
+
+enum InventoryMovementSourceType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+model ProductCostDetail {
+  id             Int            @id @default(autoincrement()) // ID del detalle de costo
+  productItemId  Int? // FK al ítem (si aplica)
+  purchaseItemId Int? // FK a compra (si aplica)
+  productItem    ProductItem?   @relation(fields: [productItemId], references: [id])
+  purchaseItem   PurchaseItem?  @relation(fields: [purchaseItemId], references: [id])
+  type           CostDetailType // Tipo de costo ('envío', 'impuesto', etc.)
+  description    String // Descripción del costo
+  amount         Float // Monto del costo
+  createdAt      DateTime       @default(now()) // Fecha de registro
+  Product        Product?       @relation(fields: [productId], references: [id])
+  productId      Int?
+}
+
+enum CostDetailType {
+  SHIPPING
+  TAX
+  ADDITIONAL
+  OTHER
+}
+
+// === Compras ===
+
+model Purchase {
+  id           Int            @id @default(autoincrement()) // ID de la compra
+  providerName String // Nombre del proveedor
+  invoiceCode  String // Código/factura del proveedor
+  purchaseDate DateTime // Fecha de compra
+  createdAt    DateTime       @default(now()) // Fecha de registro
+  items        PurchaseItem[] // Ítems comprados
+}
+
+model PurchaseItem {
+  id          Int                 @id @default(autoincrement()) // ID del ítem
+  purchaseId  Int // FK a compra
+  productId   Int // FK al producto
+  unitCost    Float // Costo unitario
+  quantity    Int // Cantidad comprada
+  status      PurchaseItemStatus // Estado (recibido, pendiente, etc.)
+  createdAt   DateTime            @default(now()) // Fecha de registro
+  purchase    Purchase            @relation(fields: [purchaseId], references: [id])
+  product     Product             @relation(fields: [productId], references: [id])
+  costDetails ProductCostDetail[] // Detalles de costo asociados
+  sales       Sale[] // Ventas relacionadas (si aplica)
+}
+
+enum PurchaseItemStatus {
+  PENDING
+  RECEIVED
+  REJECTED
+}
+
+// === Ventas ===
+
+model Sale {
+  id                      Int           @id @default(autoincrement()) // ID de la venta
+  userId                  Int // Vendedor que realizó la venta
+  customerId              Int // Cliente que compró
+  productId               Int // Producto vendido
+  productItemId           Int? // Ítem único si aplica
+  purchaseItemId          Int? // Relación con ítem de compra
+  quantity                Int // Cantidad vendida
+  notes                   String? // Notas adicionales
+  salePrice               Float // Precio unitario de venta
+  totalAmount             Float // Total de la venta
+  status                  SalesStatus   @default(PENDING) // Estado de la venta (completada, pendiente, etc.)
+  type                    SaleType // Tipo de venta ('normal', 'preventa', etc.)
+  costTotal               Float // Costo total de la venta
+  profitTotal             Float // Utilidad generada
+  isEmailVerified         Boolean       @default(false) // Email del cliente verificado
+  isPhoneVerified         Boolean       @default(false) // Teléfono del cliente verificado
+  commissionBasedOnProfit Boolean       @default(false) // ¿Comisión sobre ganancia?
+  createdAt               DateTime      @default(now()) // Fecha de venta
+  user                    User          @relation(fields: [userId], references: [id])
+  customer                Customer      @relation(fields: [customerId], references: [id])
+  product                 Product       @relation(fields: [productId], references: [id])
+  productItem             ProductItem?  @relation(fields: [productItemId], references: [id])
+  purchaseItem            PurchaseItem? @relation(fields: [purchaseItemId], references: [id])
+  shipment                Shipment?
+  payments                Payment[]
+  commission              Commission?
+  return                  Return?
+  Coupon                  Coupon[]
+}
+
+enum SalesStatus {
+  PENDING
+  PAID
+  CANCELED
+  REFUNDED
+  COMPLETED
+}
+
+enum SaleType {
+  REGULAR
+  PREORDER
+}
+
+model CapitalTransaction {
+  id          Int         @id @default(autoincrement())
+  type        CapitalType // INJECTION, PURCHASE_EXPENSE, OPERATIONAL_EXPENSE, SALE_PROFIT, DEVOLUTION_COST, WITHDRAWAL
+  amount      Float
+  description String
+  referenceId Int? // opcional: id de la venta, compra, devolución, etc.
+  createdAt   DateTime    @default(now())
+}
+
+enum CapitalType {
+  INJECTION
+  PURCHASE_EXPENSE
+  OPERATIONAL_EXPENSE
+  SALE_PROFIT
+  DEVOLUTION_COST
+  WITHDRAWAL
+}
+
+model Shipment {
+  id               Int            @id @default(autoincrement()) // ID del envío
+  saleId           Int            @unique // FK a venta
+  trackingCode     String // Código de seguimiento
+  carrier          String // Empresa de envío
+  shippingType     ShippingType // Tipo de envío (normal, express...)
+  shippingMethodId Int
+  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id])
+  shippingCost     Float // Costo del envío
+  paidBy           ShippingPayer // Quién pagó el envío (cliente, empresa...)
+  status           ShipmentStatus // Estado del envío
+  deliveredAt      DateTime? // Fecha de entrega
+  createdAt        DateTime       @default(now()) // Fecha de creación
+
+  sale Sale @relation(fields: [saleId], references: [id])
+}
+
+model ShippingMethod {
+  id          Int        @id @default(autoincrement()) // ID único
+  name        String // Nombre (Ej: Estándar, Express, Olva)
+  description String? // Descripción opcional
+  isActive    Boolean    @default(true) // Habilitado o no
+  createdAt   DateTime   @default(now())
+  shipments   Shipment[] // Relación con envíos
+}
+
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+  CANCELED
+}
+
+enum ShippingType {
+  STANDARD
+  EXPRESS
+  LOCAL
+}
+
+enum ShippingPayer {
+  CUSTOMER
+  COMPANY
+  SELLER
+}
+
+model PaymentMethod {
+  id                   Int       @id @default(autoincrement()) // ID del método de pago
+  name                 String // Nombre (Yape, Plin, Visa...)
+  isActive             Boolean   @default(true) // Si está habilitado
+  supportsInstallments Boolean   @default(false) // ¿Permite cuotas?
+  createdAt            DateTime  @default(now()) // Fecha de creación
+  payments             Payment[] // Pagos con este método
+}
+
+model Payment {
+  id              Int               @id @default(autoincrement()) // ID del pago
+  saleId          Int // Venta asociada
+  paymentMethodId Int // Método usado
+  totalPaid       Float // Total pagado
+  status          PaymentStatus     @default(PENDING) // Estado del pago (completado, fallido...)
+  paidAt          DateTime? // Fecha de pago efectiva
+  createdAt       DateTime          @default(now()) // Fecha de registro
+  sale            Sale              @relation(fields: [saleId], references: [id])
+  paymentMethod   PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
+  installments    SaleInstallment[] // Cuotas si las hay
+}
+
+enum PaymentStatus {
+  COMPLETED
+  FAILED
+  PENDING
+}
+
+model InstallmentPlan {
+  id                Int               @id @default(autoincrement()) // ID del plan de cuotas
+  name              String // Nombre del plan
+  interestRate      Float // Tasa de interés
+  totalInstallments Int // Cuotas totales
+  isActive          Boolean           @default(true) // ¿Activo?
+  createdAt         DateTime          @default(now()) // Fecha de registro
+  installments      SaleInstallment[] // Cuotas asociadas
+}
+
+model SaleInstallment {
+  id                Int             @id @default(autoincrement()) // ID de cuota
+  paymentId         Int // FK al pago
+  installmentPlanId Int // FK al plan
+  installmentNumber Int // Nro. de cuota
+  dueDate           DateTime // Fecha de vencimiento
+  amount            Float // Monto de la cuota
+  paid              Boolean         @default(false) // ¿Pagado?
+  paidAt            DateTime? // Fecha de pago si aplica
+  payment           Payment         @relation(fields: [paymentId], references: [id])
+  plan              InstallmentPlan @relation(fields: [installmentPlanId], references: [id])
+}
+
+// === Comisiones y retiros ===
+
+model Commission {
+  id        Int              @id @default(autoincrement()) // ID de la comisión
+  saleId    Int              @unique // FK a la venta (único)
+  userId    Int // Usuario que recibe comisión
+  amount    Float // Monto de la comisión
+  status    CommissionStatus @default(PENDING) // Estado (pendiente, pagado...)
+  createdAt DateTime         @default(now()) // Fecha de registro
+
+  sale Sale @relation(fields: [saleId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+}
+
+model WithdrawalRequest {
+  id        Int              @id @default(autoincrement()) // ID del retiro solicitado
+  userId    Int // Usuario solicitante
+  amount    Float // Monto a retirar
+  status    WithdrawalStatus // Estado del retiro (pendiente, aprobado, rechazado)
+  note      String? // Nota adicional del usuario o admin
+  createdAt DateTime         @default(now()) // Fecha de solicitud
+  updatedAt DateTime         @default(now()) // Última actualización
+  user      User             @relation(fields: [userId], references: [id])
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+// === Promociones y cupones ===
+
+model Coupon {
+  id           Int        @id @default(autoincrement()) // ID del cupón
+  code         String     @unique // Código único
+  discountType CouponType // Tipo de descuento ('percent', 'amount')
+  amount       Float // Monto del descuento
+  usedBySaleId Int? // FK a venta donde se usó (nullable)
+  isActive     Boolean    @default(true) // Si está activo
+  expiresAt    DateTime? // Fecha de expiración opcional
+  usedInSale   Sale?      @relation(fields: [usedBySaleId], references: [id])
+}
+
+enum CouponType {
+  PERCENT // Porcentaje de descuento
+  AMOUNT // Monto fijo de descuento
+}
+
+model Promotion {
+  id           Int           @id @default(autoincrement()) // ID de la promoción
+  title        String // Título visible
+  description  String // Descripción de la promo
+  discountType CouponType // Tipo de descuento ('percent', 'amount')
+  amount       Float // Valor de descuento
+  appliesTo    PromotionType // Aplica a: 'category', 'product', etc.
+  referenceId  Int // ID de la entidad a la que aplica
+  isActive     Boolean       @default(true) // ¿Está activa?
+  startsAt     DateTime // Inicio de la promo
+  endsAt       DateTime // Fin de la promo
+}
+
+enum PromotionType {
+  CATEGORY // Aplica a una categoría
+  PRODUCT // Aplica a un producto específico
+  BRAND // Aplica a una marca
+  SELLER // Aplica a un vendedor
+}
+
+// === Devoluciones ===
+
+model Return {
+  id         Int              @id @default(autoincrement()) // ID de la devolución
+  saleId     Int              @unique // FK a la venta
+  reason     String // Motivo de la devolución
+  resolution ReturnResolution // Acción tomada (reembolso, reemplazo...)
+  cost       Float // Costo asumido en la devolución
+  createdAt  DateTime         @default(now()) // Fecha de la devolución
+  sale       Sale             @relation(fields: [saleId], references: [id])
+}
+
+enum ReturnResolution {
+  REFUND
+  REPLACEMENT
+  CREDIT
+  NONE
+}
+
+// === Configuración ===
+
+model Setting {
+  id          Int    @id @default(autoincrement()) // ID de la configuración
+  key         String @unique // Clave única (ej. 'tax_rate')
+  value       String // Valor de la configuración
+  description String // Descripción para el admin
+}
+
+// === Auditoría y seguridad ===
+
+model AuditLog {
+  id        Int         @id @default(autoincrement()) // ID del log
+  userId    Int // Usuario que realizó la acción
+  action    AuditAction // Acción realizada ('login', 'update_sale', etc.)
+  entity    EntityType // Entidad afectada ('Sale', 'Product', ...)
+  entityId  Int // ID de la entidad
+  metadata  String // Datos adicionales
+  createdAt DateTime    @default(now()) // Fecha de la acción
+  ip        String?
+  userAgent String?
+  user      User        @relation(fields: [userId], references: [id])
+}
+
+enum EntityType {
+  SALE
+  PRODUCT
+  USER
+  SELLER
+  COUPON
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  REGISTER
+  SALE_COMPLETED
+}
+
+model EntityChangeLog {
+  id            Int         @id @default(autoincrement()) // ID del log de cambios
+  entityType    EntityType // Tipo de entidad ('Product', 'Sale')
+  entityId      Int // ID de la entidad
+  changedBy     Int // Usuario que realizó el cambio
+  changeType    AuditAction // Tipo de cambio ('CREATE', 'UPDATE', 'DELETE')
+  changeSummary String // Descripción del cambio
+  diff          Json // JSON con los cambios
+  createdAt     DateTime    @default(now()) // Fecha del cambio
+  user          User        @relation("EntityChangedBy", fields: [changedBy], references: [id])
+}
+
+// === Referidos ===
+
+model Referral {
+  id             Int      @id @default(autoincrement()) // ID del referido
+  referrerId     Int // Usuario que refiere
+  referredUserId Int // Usuario referido
+  createdAt      DateTime @default(now()) // Fecha del referido
+
+  referrer User @relation("Referrer", fields: [referrerId], references: [id])
+  referred User @relation("Referred", fields: [referredUserId], references: [id])
+}
+
+// === Notificaciones ===
+
+model Notification {
+  id        Int      @id @default(autoincrement()) // ID de la notificación
+  userId    Int // Usuario destinatario
+  title     String // Título de la notificación
+  body      String // Cuerpo o mensaje
+  isRead    Boolean  @default(false) // Leída o no
+  createdAt DateTime @default(now()) // Fecha de creación
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// === Wishlist ===
+
+model Wishlist {
+  id         Int      @id @default(autoincrement()) // ID del registro en wishlist
+  customerId Int // FK al cliente
+  productId  Int // FK al producto
+  createdAt  DateTime @default(now()) // Fecha de adición
+  customer   Customer @relation(fields: [customerId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+// === Reseñas de productos ===
+
+model ProductReview {
+  id         Int      @id @default(autoincrement()) // ID de la reseña
+  productId  Int // FK al producto
+  customerId Int // FK al cliente
+  rating     Int // Puntuación (1-5)
+  comment    String // Comentario escrito
+  createdAt  DateTime @default(now()) // Fecha de creación
+
+  product  Product  @relation(fields: [productId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+}
+
+// === Carrito ===
+
+model CartSession {
+  id           Int      @id @default(autoincrement()) // ID del carrito
+  customerId   Int? // Cliente asociado (opcional)
+  sessionToken String   @unique // Token de sesión
+  createdAt    DateTime @default(now()) // Fecha de creación
+
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  items    CartItem[]
+}
+
+model CartItem {
+  id            Int      @id @default(autoincrement()) // ID del ítem en carrito
+  cartSessionId Int // FK al carrito
+  productId     Int // Producto agregado
+  quantity      Int // Cantidad
+  addedAt       DateTime @default(now()) // Fecha de adición
+
+  cartSession CartSession @relation(fields: [cartSessionId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+}
+
+// === Etiquetas de producto ===
+
+model ProductTag {
+  id        Int    @id @default(autoincrement()) // ID de la etiqueta
+  productId Int // FK al producto
+  tag       String // Texto de la etiqueta
+
+  product Product @relation(fields: [productId], references: [id])
+}
+
+// === Variantes de producto ===
+
+model ProductVariant {
+  id        Int      @id @default(autoincrement()) // ID de la variante
+  productId Int // FK al producto base
+  sku       String   @unique // Código SKU único
+  price     Float // Precio de la variante
+  stock     Int // Stock disponible
+  imageUrl  String // Imagen de la variante
+  isActive  Boolean  @default(true) // Activa o no
+  createdAt DateTime @default(now()) // Fecha de creación
+
+  product    Product            @relation(fields: [productId], references: [id])
+  attributes VariantAttribute[]
+}
+
+model VariantAttribute {
+  id          Int @id @default(autoincrement()) // ID del atributo de variante
+  variantId   Int // FK a la variante
+  attributeId Int // FK al tipo de atributo
+  valueId     Int // FK al valor del atributo
+
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  attribute Attribute      @relation(fields: [attributeId], references: [id])
+  value     AttributeValue @relation(fields: [valueId], references: [id])
+}
+
+// === Proveedores externos de login ===
+
+model LoginAttempt {
+  id         Int                @id @default(autoincrement()) // ID del intento
+  userId     Int? // Usuario (nullable)
+  loginInput String // Email o username usado
+  ipAddress  String // IP origen
+  status     LoginAttemptStatus // SUCCESS o FAIL
+  createdAt  DateTime           @default(now()) // Fecha del intento
+  user       User?              @relation(fields: [userId], references: [id])
+}
+
+enum LoginAttemptStatus {
+  SUCCESS
+  FAIL
+}
+
+model UserProvider {
+  id             Int              @id @default(autoincrement()) // ID del proveedor
+  userId         Int // FK al usuario
+  provider       UserProviderType // google, facebook, etc.
+  providerUserId String // ID único del proveedor
+  email          String // Email confirmado por el proveedor
+  createdAt      DateTime         @default(now()) // Fecha de enlace
+  user           User             @relation(fields: [userId], references: [id])
+}
+
+enum UserProviderType {
+  GOOGLE
+  FACEBOOK
+  GITHUB
+  TWITTER
+  APPLE
+}
