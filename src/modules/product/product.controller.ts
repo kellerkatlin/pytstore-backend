@@ -14,6 +14,7 @@ import { FilterProductDto } from './dto/filter-product.dto';
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ok } from 'src/common/helpers/response.helper';
 
 @Controller('product')
 export class ProductController {
@@ -34,6 +35,15 @@ export class ProductController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
+  }
+
+  @Get(':id/stock')
+  @Auth('SUPERADMIN', 'ADMIN')
+  async findOneStock(@Param('id', ParseIntPipe) id: number) {
+    const product = await this.service.findOne(id);
+    const stock = await this.service.calculateStock(id);
+
+    return ok({ ...product.data, stockReal: stock }, 'Producto con stock real');
   }
 
   @Auth('SUPERADMIN', 'ADMIN')

@@ -5,10 +5,14 @@ import { created, ok, paginated } from 'src/common/helpers/response.helper';
 import { FilterProductDto } from './dto/filter-product.dto';
 import { ProductStatus } from '@prisma/client';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { StockService } from 'src/common/services/stock/stock.service';
 
 @Injectable()
 export class ProductService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stockService: StockService,
+  ) {}
   private readonly select = {
     id: true,
     title: true,
@@ -131,5 +135,9 @@ export class ProductService {
     });
 
     return ok(null, 'Producto eliminado correctamente');
+  }
+
+  async calculateStock(productId: number): Promise<number> {
+    return this.stockService.getTotalStock(productId);
   }
 }
