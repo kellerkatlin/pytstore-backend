@@ -216,6 +216,7 @@ enum CommissionType {
   PERCENT // Porcentaje del precio de venta
 }
 
+// completado (x)
 model ProductImage {
   id        Int     @id @default(autoincrement()) // ID de la imagen
   productId Int // FK al producto
@@ -224,14 +225,18 @@ model ProductImage {
   isPrimary Boolean @default(false) // Si es imagen principal
 }
 
+// completado (x)
 model ProductItem {
-  id                Int                 @id @default(autoincrement()) // ID del ítem único
-  productId         Int // FK al producto padre
-  product           Product             @relation(fields: [productId], references: [id])
-  serialCode        String              @unique // Código de serie (único por ítem)
-  imageUrl          String // Imagen del producto específico
-  condition         String // Estado físico (ej. 'como nuevo')
-  functionality     String // Estado funcional (ej. '100% operativa')
+  id             Int                @id @default(autoincrement()) // ID del ítem único
+  productId      Int // FK al producto padre
+  product        Product            @relation(fields: [productId], references: [id])
+  serialCode     String             @unique // Código de serie (único por ítem)
+  images         ProductItemImage[]
+  condition      String // Estado físico (ej. 'como nuevo')
+  functionality  String // Estado funcional (ej. '100% operativa')
+  purchaseItemId Int?
+  purchaseItem   PurchaseItem?      @relation(fields: [purchaseItemId], references: [id])
+
   available         Boolean             @default(true) // Disponible para venta
   cost              Float // Costo del producto
   salePrice         Float // Precio de venta asignado
@@ -241,6 +246,18 @@ model ProductItem {
   Sale              Sale[]
 }
 
+// completado (x)
+model ProductItemImage {
+  id          Int         @id @default(autoincrement())
+  itemId      Int
+  imageUrl    String
+  isPrimary   Boolean     @default(false)
+  productItem ProductItem @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, imageUrl])
+}
+
+//completado (x)
 model Attribute {
   id               Int                @id @default(autoincrement()) // ID del atributo
   name             String // Nombre del atributo (Ej. Color)
@@ -251,6 +268,7 @@ model Attribute {
   VariantAttribute VariantAttribute[]
 }
 
+//completado(x)
 model AttributeValue {
   id               Int                @id @default(autoincrement()) // ID del valor
   attributeId      Int // FK al atributo
@@ -260,6 +278,7 @@ model AttributeValue {
   VariantAttribute VariantAttribute[]
 }
 
+//completado(x)
 model ProductAttribute {
   id          Int            @id @default(autoincrement()) // ID del vínculo
   productId   Int // FK al producto
@@ -276,6 +295,8 @@ model InventoryMovement {
   id         Int                         @id @default(autoincrement()) // ID del movimiento
   productId  Int // FK al producto
   product    Product                     @relation(fields: [productId], references: [id])
+  variantId  Int? // FK a variante (si aplica)
+  variant    ProductVariant?             @relation(fields: [variantId], references: [id])
   sourceType InventoryMovementSourceType // Origen del movimiento ('purchase', 'sale', etc.)
   sourceId   Int // ID de la fuente (ej. ID de compra o venta)
   quantity   Int // Cantidad movida
@@ -319,6 +340,7 @@ enum CostDetailType {
 
 // === Compras ===
 
+// completado (x)
 model Purchase {
   id           Int            @id @default(autoincrement()) // ID de la compra
   providerName String // Nombre del proveedor
@@ -328,18 +350,20 @@ model Purchase {
   items        PurchaseItem[] // Ítems comprados
 }
 
+// completado (x)
 model PurchaseItem {
-  id          Int                 @id @default(autoincrement()) // ID del ítem
-  purchaseId  Int // FK a compra
-  productId   Int // FK al producto
-  unitCost    Float // Costo unitario
-  quantity    Int // Cantidad comprada
-  status      PurchaseItemStatus // Estado (recibido, pendiente, etc.)
-  createdAt   DateTime            @default(now()) // Fecha de registro
-  purchase    Purchase            @relation(fields: [purchaseId], references: [id])
-  product     Product             @relation(fields: [productId], references: [id])
-  costDetails ProductCostDetail[] // Detalles de costo asociados
-  sales       Sale[] // Ventas relacionadas (si aplica)
+  id           Int                 @id @default(autoincrement()) // ID del ítem
+  purchaseId   Int // FK a compra
+  productId    Int // FK al producto
+  unitCost     Float // Costo unitario
+  quantity     Int // Cantidad comprada
+  productItems ProductItem[] // opcional
+  status       PurchaseItemStatus // Estado (recibido, pendiente, etc.)
+  createdAt    DateTime            @default(now()) // Fecha de registro
+  purchase     Purchase            @relation(fields: [purchaseId], references: [id])
+  product      Product             @relation(fields: [productId], references: [id])
+  costDetails  ProductCostDetail[] // Detalles de costo asociados
+  sales        Sale[] // Ventas relacionadas (si aplica)
 }
 
 enum PurchaseItemStatus {
@@ -350,30 +374,33 @@ enum PurchaseItemStatus {
 
 // === Ventas ===
 
+// completado (x)
 model Sale {
-  id                      Int           @id @default(autoincrement()) // ID de la venta
+  id                      Int             @id @default(autoincrement()) // ID de la venta
   userId                  Int // Vendedor que realizó la venta
   customerId              Int // Cliente que compró
   productId               Int // Producto vendido
   productItemId           Int? // Ítem único si aplica
   purchaseItemId          Int? // Relación con ítem de compra
+  variantId               Int? // Relación con variante (si aplica)
+  variant                 ProductVariant? @relation(fields: [variantId], references: [id])
   quantity                Int // Cantidad vendida
   notes                   String? // Notas adicionales
   salePrice               Float // Precio unitario de venta
   totalAmount             Float // Total de la venta
-  status                  SalesStatus   @default(PENDING) // Estado de la venta (completada, pendiente, etc.)
+  status                  SalesStatus     @default(PENDING) // Estado de la venta (completada, pendiente, etc.)
   type                    SaleType // Tipo de venta ('normal', 'preventa', etc.)
   costTotal               Float // Costo total de la venta
   profitTotal             Float // Utilidad generada
-  isEmailVerified         Boolean       @default(false) // Email del cliente verificado
-  isPhoneVerified         Boolean       @default(false) // Teléfono del cliente verificado
-  commissionBasedOnProfit Boolean       @default(false) // ¿Comisión sobre ganancia?
-  createdAt               DateTime      @default(now()) // Fecha de venta
-  user                    User          @relation(fields: [userId], references: [id])
-  customer                Customer      @relation(fields: [customerId], references: [id])
-  product                 Product       @relation(fields: [productId], references: [id])
-  productItem             ProductItem?  @relation(fields: [productItemId], references: [id])
-  purchaseItem            PurchaseItem? @relation(fields: [purchaseItemId], references: [id])
+  isEmailVerified         Boolean         @default(false) // Email del cliente verificado
+  isPhoneVerified         Boolean         @default(false) // Teléfono del cliente verificado
+  commissionBasedOnProfit Boolean         @default(false) // ¿Comisión sobre ganancia?
+  createdAt               DateTime        @default(now()) // Fecha de venta
+  user                    User            @relation(fields: [userId], references: [id])
+  customer                Customer        @relation(fields: [customerId], references: [id])
+  product                 Product         @relation(fields: [productId], references: [id])
+  productItem             ProductItem?    @relation(fields: [productItemId], references: [id])
+  purchaseItem            PurchaseItem?   @relation(fields: [purchaseItemId], references: [id])
   shipment                Shipment?
   payments                Payment[]
   commission              Commission?
@@ -511,6 +538,7 @@ model SaleInstallment {
 
 // === Comisiones y retiros ===
 
+// completado (x)
 model Commission {
   id        Int              @id @default(autoincrement()) // ID de la comisión
   saleId    Int              @unique // FK a la venta (único)
@@ -742,20 +770,24 @@ model ProductTag {
 
 // === Variantes de producto ===
 
+// completado (x)
 model ProductVariant {
-  id        Int      @id @default(autoincrement()) // ID de la variante
-  productId Int // FK al producto base
-  sku       String   @unique // Código SKU único
-  price     Float // Precio de la variante
-  stock     Int // Stock disponible
-  imageUrl  String // Imagen de la variante
-  isActive  Boolean  @default(true) // Activa o no
-  createdAt DateTime @default(now()) // Fecha de creación
+  id             Int                 @id @default(autoincrement()) // ID de la variante
+  productId      Int // FK al producto base
+  sku            String              @unique // Código SKU único
+  price          Float // Precio de la variante
+  stock          Int // Stock disponible
+  inventoryMoves InventoryMovement[] // Movimientos de inventario
+  sales          Sale[] // Ventas relacionadas
+  imageUrl       String // Imagen de la variante
+  isActive       Boolean             @default(true) // Activa o no
+  createdAt      DateTime            @default(now()) // Fecha de creación
 
   product    Product            @relation(fields: [productId], references: [id])
   attributes VariantAttribute[]
 }
 
+// completado (x)
 model VariantAttribute {
   id          Int @id @default(autoincrement()) // ID del atributo de variante
   variantId   Int // FK a la variante
