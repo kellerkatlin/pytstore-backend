@@ -37,4 +37,71 @@ export class ProductVariantService {
     await this.prisma.productVariant.delete({ where: { id } });
     return ok(null, 'Variante eliminada');
   }
+
+  async generateSku(variantId: number) {
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: {
+        product: true,
+        attributes: {
+          include: {
+            attribute: true,
+            value: true,
+          },
+          orderBy: {
+            attributeId: 'asc',
+          },
+        },
+      },
+    });
+    if (!variant) throw new NotFoundException('Variante no encontrada');
+
+    const prefix = variant.product.title
+      .replace(/\s+/g, '')
+      .substring(0, 6)
+      .toUpperCase();
+
+    const parts = variant.attributes.map((attr) =>
+      attr.value.value.replace(/\s+/g, '').toUpperCase(),
+    );
+
+    const sku = [prefix, ...parts].join('-');
+    // validacion de la unidad
+    const existing = await this.prisma.productVariant.findUnique({
+      where: { sku },
+    });
+
+    if (existing && existing.id !== variantId) {
+      throw new ConflictException('SKU generado ya existe');
+    }
+
+    // guardar el SKU
+
+    const updated = await this.prisma.productVariant.update({
+      where: { id: variantId },
+      data: { sku },
+    });
+
+    return ok(updated, 'SKU generado correctamente');
+  }
+
+  async calculateStockByVariant(variantId: number): Promise<number> {
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: variantId },
+    });
+    if (!variant) throw new NotFoundException('Variante no encontrada');
+
+    const movimientos = await this.prisma.inventoryMovement.groupBy({
+      by: ['direction'],
+      where: { variantId }, // ahora filtramos por variante directamente
+      _sum: { quantity: true },
+    });
+
+    const inQty =
+      movimientos.find((m) => m.direction === 'IN')?._sum.quantity ?? 0;
+    const outQty =
+      movimientos.find((m) => m.direction === 'OUT')?._sum.quantity ?? 0;
+
+    return inQty - outQty;
+  }
 }
