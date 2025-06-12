@@ -166,7 +166,9 @@ export class SaleService {
       }
 
       const total = dto.salePrice * dto.quantity;
+
       const cost = costUnit * dto.quantity;
+
       const profit = total - cost;
 
       let sellerUserId = dto.userId;
@@ -217,6 +219,26 @@ export class SaleService {
         sellerUserId,
         sale.commissionBasedOnProfit,
       );
+
+      const cajaId = await tx.capitalAccount
+        .findUnique({
+          where: { name: 'CASH' },
+        })
+        .then((acc) => acc?.id);
+
+      if (!cajaId) {
+        throw new Error('No existe la cuenta de Caja');
+      }
+      await tx.capitalTransaction.create({
+        data: {
+          amount: total,
+          type: 'SALE_PROFIT',
+          referenceType: 'SALE',
+          referenceId: sale.id,
+          description: 'Ingreso por venta',
+          accountId: cajaId,
+        },
+      });
 
       return created(sale, 'Venta registrada correctamente');
     });

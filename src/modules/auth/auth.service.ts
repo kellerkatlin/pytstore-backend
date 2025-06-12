@@ -67,12 +67,9 @@ export class AuthService {
 
     return ok(
       {
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role.name,
-        },
-        token,
+        id: user.id,
+        email: user.email,
+        role: user.role.name,
       },
       'Usuario autenticado exitosamente',
     );

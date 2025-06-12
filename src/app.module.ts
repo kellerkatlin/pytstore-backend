@@ -20,6 +20,9 @@ import { StockModule } from './common/services/stock/stock.module';
 import { SaleModule } from './modules/sale/sale.module';
 import { CommissionModule } from './modules/commission/commission.module';
 import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
+import { CapitalModule } from './modules/capital/capital.module';
+import { ExpenseModule } from './modules/expense/expense.module';
+import { IncomeStatementModule } from './capital/income-statement/income-statement.module';
 
 @Module({
   imports: [
@@ -38,6 +41,9 @@ import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
     SaleModule,
     CommissionModule,
     WithdrawalModule,
+    CapitalModule,
+    ExpenseModule,
+    IncomeStatementModule,
   ],
   controllers: [AppController, SellerController],
   providers: [AppService, PrismaService, SellerService, StockService],

@@ -1,3 +1,4 @@
+import { CommissionType } from '@prisma/client';
 import {
   IsString,
   IsInt,
@@ -5,6 +6,7 @@ import {
   Min,
   IsNotEmpty,
   IsBoolean,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateProductItemDto {
@@ -33,4 +35,12 @@ export class CreateProductItemDto {
 
   @IsBoolean()
   available: boolean;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  commissionValue?: number;
+  @IsOptional()
+  @IsString()
+  commissionType?: CommissionType;
 }

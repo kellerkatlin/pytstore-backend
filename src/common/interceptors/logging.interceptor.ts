@@ -21,7 +21,6 @@ export class LoggingInterceptor implements NestInterceptor {
       tap(() => {
         const duration = Date.now() - now;
         const email = user?.email ?? 'anon';
-        console.log(user);
         console.log(
           `[${method}] ${originalUrl} - ${duration}ms - IP: ${ip} - User: ${email}`,
         );

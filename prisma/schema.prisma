@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,51 +7,626 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// === Usuarios y autenticación ===
-
 model User {
-  id                    Int                   @id @default(autoincrement()) // ID único del usuario
-  name                  String // Nombre completo
-  lastName              String? // Apellido (opcional)
-  username              String?               @unique // Username (opcional)
-  email                 String                @unique // Correo electrónico
-  password              String // Contraseña hasheada
-  roleId                Int // Rol del usuario
-  role                  Role                  @relation(fields: [roleId], references: [id])
-  referralCode          String                @unique // Código de referido
-  isActive              Boolean               @default(true) // Activo o no
+  id                    Int                   @id @default(autoincrement())
+  name                  String
+  username              String?               @unique
+  email                 String                @unique
+  password              String
+  roleId                Int
+  referralCode          String                @unique
+  isActive              Boolean               @default(true)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @default(now())
-  seller                Seller? // Vendedor asociado
-  commissions           Commission[]
-  withdrawals           WithdrawalRequest[]
-  auditLogs             AuditLog[]
-  recoveryToken         String?
+  createdBy             Int?
+  updatedBy             Int?
   recoveryExpires       DateTime?
+  recoveryToken         String?
+  lastName              String?
+  auditLogs             AuditLog[]
+  commissions           Commission[]
   entityChanges         EntityChangeLog[]     @relation("EntityChangedBy")
-  referralsSent         Referral[]            @relation("Referrer")
-  referralsRecv         Referral[]            @relation("Referred")
-  notifications         Notification[]
+  createdExpenses       Expense[]             @relation("UserCreatedExpenses")
   loginAttempts         LoginAttempt[]
-  providers             UserProvider[]
-  sales                 Sale[]
+  notifications         Notification[]
   productPriceHistories ProductPriceHistory[] @relation("ProductPriceHistoryChangedBy")
-
-  // Auditoría extendida (opcional)
-  createdBy     Int?
-  updatedBy     Int?
-  createdByUser User? @relation("UserCreatedBy", fields: [createdBy], references: [id])
-  updatedByUser User? @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
-
-  createdUsers User[] @relation("UserCreatedBy")
-  updatedUsers User[] @relation("UserUpdatedBy")
+  referralsRecv         Referral[]            @relation("Referred")
+  referralsSent         Referral[]            @relation("Referrer")
+  sales                 Sale[]
+  seller                Seller?
+  createdByUser         User?                 @relation("UserCreatedBy", fields: [createdBy], references: [id])
+  createdUsers          User[]                @relation("UserCreatedBy")
+  role                  Role                  @relation(fields: [roleId], references: [id])
+  updatedByUser         User?                 @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
+  updatedUsers          User[]                @relation("UserUpdatedBy")
+  providers             UserProvider[]
+  withdrawals           WithdrawalRequest[]
 }
 
 model Role {
-  id          Int      @id @default(autoincrement()) // ID del rol
-  name        RoleName @unique // Nombre (admin, vendedor, etc.)
-  description String // Descripción del rol
+  id          Int      @id @default(autoincrement())
+  description String
+  name        RoleName @unique
   users       User[]
+}
+
+model Seller {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  ruc          String?  @unique
+  businessName String?
+  storeName    String?
+  description  String?
+  logoUrl      String?
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model SellerRequest {
+  id             Int                 @id @default(autoincrement())
+  email          String?             @unique
+  phone          String?             @unique
+  name           String
+  message        String?
+  status         SellerRequestStatus @default(PENDING)
+  createdAt      DateTime            @default(now())
+  approvedAt     DateTime?
+  completedAt    DateTime?
+  rejectedAt     DateTime?
+  creationToken  String?             @unique
+  tokenExpiresAt DateTime?
+}
+
+model Customer {
+  id                  Int                   @id @default(autoincrement())
+  name                String
+  email               String?               @unique
+  phone               String                @unique
+  createdAt           DateTime              @default(now())
+  password            String?
+  isTemporaryPassword Boolean               @default(false)
+  addresses           Address[]
+  cartSession         CartSession[]
+  logs                CustomerActivityLog[]
+  reviews             ProductReview[]
+  sales               Sale[]
+  wishlists           Wishlist[]
+}
+
+model CustomerActivityLog {
+  id         Int      @id @default(autoincrement())
+  customerId Int
+  action     String
+  metadata   String
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id])
+}
+
+model Address {
+  id          Int      @id @default(autoincrement())
+  addressLine String
+  district    String
+  city        String
+  phone       String
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id])
+}
+
+model Category {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  isDeleted  Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now())
+  attributes Attribute[]
+  products   Product[]
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+  products  Product[]
+}
+
+model ProductPriceHistory {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  price     Float
+  changedAt DateTime @default(now())
+  reason    String?
+  changedBy Int?
+  user      User?    @relation("ProductPriceHistoryChangedBy", fields: [changedBy], references: [id])
+}
+
+model Product {
+  id              Int                 @id @default(autoincrement())
+  title           String
+  description     String
+  price           Float
+  stock           Int
+  categoryId      Int
+  brandId         Int
+  isActive        Boolean             @default(true)
+  isPreorder      Boolean             @default(false)
+  commissionValue Float
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @default(now())
+  commissionType  CommissionType
+  status          ProductStatus       @default(ACTIVE)
+  cartItems       CartItem[]
+  inventoryMoves  InventoryMovement[]
+  brand           Brand               @relation(fields: [brandId], references: [id])
+  category        Category            @relation(fields: [categoryId], references: [id])
+  attributes      ProductAttribute[]
+  costDetails     ProductCostDetail[]
+  images          ProductImage[]
+  items           ProductItem[]
+  reviews         ProductReview[]
+  tags            ProductTag[]
+  variants        ProductVariant[]
+  PurchaseItem    PurchaseItem[]
+  sales           Sale[]
+  wishlists       Wishlist[]
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  imageUrl  String
+  isPrimary Boolean @default(false)
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model ProductItem {
+  id                Int                 @id @default(autoincrement())
+  productId         Int
+  serialCode        String              @unique
+  condition         String
+  functionality     String
+  available         Boolean             @default(true)
+  cost              Float
+  salePrice         Float
+  sold              Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  purchaseItemId    Int?
+  commissionType    CommissionType?
+  commissionValue   Float?
+  ProductCostDetail ProductCostDetail[]
+  product           Product             @relation(fields: [productId], references: [id])
+  purchaseItem      PurchaseItem?       @relation(fields: [purchaseItemId], references: [id])
+  images            ProductItemImage[]
+  Sale              Sale[]
+}
+
+model ProductItemImage {
+  id          Int         @id @default(autoincrement())
+  itemId      Int
+  imageUrl    String
+  isPrimary   Boolean     @default(false)
+  productItem ProductItem @relation(fields: [itemId], references: [id])
+
+  @@unique([itemId, imageUrl])
+}
+
+model Attribute {
+  id               Int                @id @default(autoincrement())
+  name             String
+  categoryId       Int
+  category         Category           @relation(fields: [categoryId], references: [id])
+  values           AttributeValue[]
+  ProductAttribute ProductAttribute[]
+  VariantAttribute VariantAttribute[]
+
+  @@unique([name, categoryId])
+}
+
+model AttributeValue {
+  id               Int                @id @default(autoincrement())
+  attributeId      Int
+  value            String
+  attribute        Attribute          @relation(fields: [attributeId], references: [id])
+  ProductAttribute ProductAttribute[]
+  VariantAttribute VariantAttribute[]
+}
+
+model ProductAttribute {
+  id          Int            @id @default(autoincrement())
+  productId   Int
+  attributeId Int
+  valueId     Int
+  attribute   Attribute      @relation(fields: [attributeId], references: [id])
+  product     Product        @relation(fields: [productId], references: [id])
+  value       AttributeValue @relation(fields: [valueId], references: [id])
+}
+
+model InventoryMovement {
+  id         Int                         @id @default(autoincrement())
+  productId  Int
+  sourceId   Int
+  quantity   Int
+  reason     String
+  createdAt  DateTime                    @default(now())
+  sourceType InventoryMovementSourceType
+  direction  InventoryMovementDirection
+  variantId  Int?
+  product    Product                     @relation(fields: [productId], references: [id])
+  variant    ProductVariant?             @relation(fields: [variantId], references: [id])
+}
+
+model ProductCostDetail {
+  id             Int            @id @default(autoincrement())
+  productItemId  Int?
+  purchaseItemId Int?
+  description    String
+  amount         Float
+  createdAt      DateTime       @default(now())
+  productId      Int?
+  type           CostDetailType
+  Product        Product?       @relation(fields: [productId], references: [id])
+  productItem    ProductItem?   @relation(fields: [productItemId], references: [id])
+  purchaseItem   PurchaseItem?  @relation(fields: [purchaseItemId], references: [id])
+}
+
+model Purchase {
+  id           Int            @id @default(autoincrement())
+  providerName String
+  invoiceCode  String
+  purchaseDate DateTime
+  createdAt    DateTime       @default(now())
+  items        PurchaseItem[]
+}
+
+model PurchaseItem {
+  id           Int                 @id @default(autoincrement())
+  purchaseId   Int
+  productId    Int
+  unitCost     Float
+  quantity     Int
+  createdAt    DateTime            @default(now())
+  status       PurchaseItemStatus
+  costDetails  ProductCostDetail[]
+  productItems ProductItem[]
+  product      Product             @relation(fields: [productId], references: [id])
+  purchase     Purchase            @relation(fields: [purchaseId], references: [id])
+  sales        Sale[]
+}
+
+model Sale {
+  id                      Int             @id @default(autoincrement())
+  userId                  Int
+  productId               Int
+  productItemId           Int?
+  purchaseItemId          Int?
+  quantity                Int
+  notes                   String?
+  salePrice               Float
+  totalAmount             Float
+  costTotal               Float
+  profitTotal             Float
+  commissionBasedOnProfit Boolean         @default(false)
+  createdAt               DateTime        @default(now())
+  customerId              Int
+  isEmailVerified         Boolean         @default(false)
+  isPhoneVerified         Boolean         @default(false)
+  status                  SalesStatus     @default(PENDING)
+  type                    SaleType
+  variantId               Int?
+  commission              Commission?
+  Coupon                  Coupon[]
+  payments                Payment[]
+  return                  Return?
+  customer                Customer        @relation(fields: [customerId], references: [id])
+  product                 Product         @relation(fields: [productId], references: [id])
+  productItem             ProductItem?    @relation(fields: [productItemId], references: [id])
+  purchaseItem            PurchaseItem?   @relation(fields: [purchaseItemId], references: [id])
+  user                    User            @relation(fields: [userId], references: [id])
+  variant                 ProductVariant? @relation(fields: [variantId], references: [id])
+  shipment                Shipment?
+}
+
+model CapitalTransaction {
+  id            Int               @id @default(autoincrement())
+  type          CapitalType
+  amount        Float
+  description   String
+  referenceId   Int?
+  createdAt     DateTime          @default(now())
+  accountId     Int
+  expenseId     Int?              @unique
+  referenceType CapitalSourceType
+  account       CapitalAccount    @relation(fields: [accountId], references: [id])
+  expense       Expense?          @relation("CapitalExpense")
+}
+
+model Expense {
+  id                   Int                 @id @default(autoincrement())
+  type                 ExpenseType
+  amount               Float
+  description          String
+  createdAt            DateTime            @default(now())
+  createdById          Int?
+  capitalTransactionId Int?                @unique
+  capitalTransaction   CapitalTransaction? @relation("CapitalExpense", fields: [capitalTransactionId], references: [id])
+  createdBy            User?               @relation("UserCreatedExpenses", fields: [createdById], references: [id])
+}
+
+model CapitalAccount {
+  id           Int                  @id @default(autoincrement())
+  name         CapitalAccountName   @unique
+  description  String?
+  transactions CapitalTransaction[]
+}
+
+model Shipment {
+  id               Int            @id @default(autoincrement())
+  saleId           Int            @unique
+  trackingCode     String
+  carrier          String
+  shippingCost     Float
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+  shippingMethodId Int
+  shippingType     ShippingType
+  paidBy           ShippingPayer
+  status           ShipmentStatus
+  sale             Sale           @relation(fields: [saleId], references: [id])
+  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id])
+}
+
+model ShippingMethod {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  shipments   Shipment[]
+}
+
+model PaymentMethod {
+  id                   Int       @id @default(autoincrement())
+  name                 String
+  isActive             Boolean   @default(true)
+  supportsInstallments Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  payments             Payment[]
+}
+
+model Payment {
+  id              Int               @id @default(autoincrement())
+  saleId          Int
+  paymentMethodId Int
+  totalPaid       Float
+  paidAt          DateTime?
+  createdAt       DateTime          @default(now())
+  status          PaymentStatus     @default(PENDING)
+  paymentMethod   PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
+  sale            Sale              @relation(fields: [saleId], references: [id])
+  installments    SaleInstallment[]
+}
+
+model InstallmentPlan {
+  id                Int               @id @default(autoincrement())
+  name              String
+  interestRate      Float
+  totalInstallments Int
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  installments      SaleInstallment[]
+}
+
+model SaleInstallment {
+  id                Int             @id @default(autoincrement())
+  paymentId         Int
+  installmentPlanId Int
+  installmentNumber Int
+  dueDate           DateTime
+  amount            Float
+  paid              Boolean         @default(false)
+  paidAt            DateTime?
+  plan              InstallmentPlan @relation(fields: [installmentPlanId], references: [id])
+  payment           Payment         @relation(fields: [paymentId], references: [id])
+}
+
+model Commission {
+  id        Int              @id @default(autoincrement())
+  saleId    Int              @unique
+  userId    Int
+  amount    Float
+  createdAt DateTime         @default(now())
+  status    CommissionStatus @default(PENDING)
+  sale      Sale             @relation(fields: [saleId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+}
+
+model WithdrawalRequest {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  amount    Float
+  note      String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @default(now())
+  status    WithdrawalStatus
+  user      User             @relation(fields: [userId], references: [id])
+}
+
+model Coupon {
+  id           Int        @id @default(autoincrement())
+  code         String     @unique
+  amount       Float
+  usedBySaleId Int?
+  isActive     Boolean    @default(true)
+  expiresAt    DateTime?
+  discountType CouponType
+  usedInSale   Sale?      @relation(fields: [usedBySaleId], references: [id])
+}
+
+model Promotion {
+  id           Int           @id @default(autoincrement())
+  title        String
+  description  String
+  amount       Float
+  referenceId  Int
+  isActive     Boolean       @default(true)
+  startsAt     DateTime
+  endsAt       DateTime
+  discountType CouponType
+  appliesTo    PromotionType
+}
+
+model Return {
+  id         Int              @id @default(autoincrement())
+  saleId     Int              @unique
+  reason     String
+  cost       Float
+  createdAt  DateTime         @default(now())
+  resolution ReturnResolution
+  sale       Sale             @relation(fields: [saleId], references: [id])
+}
+
+model Setting {
+  id          Int    @id @default(autoincrement())
+  key         String @unique
+  value       String
+  description String
+}
+
+model AuditLog {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  entityId  Int
+  metadata  String
+  createdAt DateTime    @default(now())
+  ip        String?
+  userAgent String?
+  action    AuditAction
+  entity    EntityType
+  user      User        @relation(fields: [userId], references: [id])
+}
+
+model EntityChangeLog {
+  id            Int         @id @default(autoincrement())
+  entityId      Int
+  changedBy     Int
+  changeSummary String
+  diff          Json
+  createdAt     DateTime    @default(now())
+  entityType    EntityType
+  changeType    AuditAction
+  user          User        @relation("EntityChangedBy", fields: [changedBy], references: [id])
+}
+
+model Referral {
+  id             Int      @id @default(autoincrement())
+  referrerId     Int
+  referredUserId Int
+  createdAt      DateTime @default(now())
+  referred       User     @relation("Referred", fields: [referredUserId], references: [id])
+  referrer       User     @relation("Referrer", fields: [referrerId], references: [id])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Wishlist {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  createdAt  DateTime @default(now())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model ProductReview {
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  customerId Int
+  customer   Customer @relation(fields: [customerId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+}
+
+model CartSession {
+  id           Int        @id @default(autoincrement())
+  sessionToken String     @unique
+  createdAt    DateTime   @default(now())
+  customerId   Int?
+  items        CartItem[]
+  customer     Customer?  @relation(fields: [customerId], references: [id])
+}
+
+model CartItem {
+  id            Int         @id @default(autoincrement())
+  cartSessionId Int
+  productId     Int
+  quantity      Int
+  addedAt       DateTime    @default(now())
+  cartSession   CartSession @relation(fields: [cartSessionId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id])
+}
+
+model ProductTag {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  tag       String
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model ProductVariant {
+  id             Int                 @id @default(autoincrement())
+  productId      Int
+  sku            String              @unique
+  price          Float
+  stock          Int
+  imageUrl       String
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  inventoryMoves InventoryMovement[]
+  product        Product             @relation(fields: [productId], references: [id])
+  sales          Sale[]
+  attributes     VariantAttribute[]
+}
+
+model VariantAttribute {
+  id          Int            @id @default(autoincrement())
+  variantId   Int
+  attributeId Int
+  valueId     Int
+  attribute   Attribute      @relation(fields: [attributeId], references: [id])
+  value       AttributeValue @relation(fields: [valueId], references: [id])
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+}
+
+model LoginAttempt {
+  id         Int                @id @default(autoincrement())
+  userId     Int?
+  loginInput String
+  ipAddress  String
+  createdAt  DateTime           @default(now())
+  status     LoginAttemptStatus
+  user       User?              @relation(fields: [userId], references: [id])
+}
+
+model UserProvider {
+  id             Int              @id @default(autoincrement())
+  userId         Int
+  providerUserId String
+  email          String
+  createdAt      DateTime         @default(now())
+  provider       UserProviderType
+  user           User             @relation(fields: [userId], references: [id])
 }
 
 enum RoleName {
@@ -69,138 +638,10 @@ enum RoleName {
   MARKETING
 }
 
-model Seller {
-  id           Int      @id @default(autoincrement()) // ID del vendedor
-  userId       Int      @unique // FK al usuario
-  user         User     @relation(fields: [userId], references: [id])
-  ruc          String?  @unique // RUC del negocio
-  businessName String? // Razón social
-  storeName    String? // Nombre comercial
-  description  String? // Descripción de la tienda
-  logoUrl      String? // URL del logo
-  isVerified   Boolean  @default(false) // Verificación del vendedor
-  createdAt    DateTime @default(now())
-}
-
-model SellerRequest {
-  id             Int                 @id @default(autoincrement())
-  email          String?             @unique
-  phone          String?             @unique
-  name           String
-  message        String?
-  status         SellerRequestStatus @default(PENDING) // PENDING | APPROVED | REJECTED
-  createdAt      DateTime            @default(now())
-  creationToken  String?             @unique // Token único para la solicitud
-  tokenExpiresAt DateTime?
-  approvedAt     DateTime? // Fecha si fue aprobado
-  completedAt    DateTime? // Fecha completada la aprobacion  
-  rejectedAt     DateTime? // Fecha si fue rechazado
-}
-
 enum SellerRequestStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-// === Clientes y actividad ===
-
-model Customer {
-  id                  Int                   @id @default(autoincrement()) // ID del cliente
-  name                String // Nombre del cliente
-  email               String?               @unique // Correo electrónico
-  phone               String                @unique // Teléfono de contacto
-  createdAt           DateTime              @default(now()) // Fecha de registro
-  logs                CustomerActivityLog[] // Acciones realizadas por el cliente
-  addresses           Address[] // Direcciones asociadas
-  password            String? // Contraseña hasheada (opcional, si se usa autenticación)
-  sales               Sale[] // Compras realizadas
-  isTemporaryPassword Boolean               @default(false)
-  wishlists           Wishlist[] // Lista de deseos
-  reviews             ProductReview[] // Opiniones de productos
-  cartSession         CartSession[] // Carritos de compra
-}
-
-model CustomerActivityLog {
-  id         Int      @id @default(autoincrement()) // ID del log
-  customerId Int // FK al cliente
-  customer   Customer @relation(fields: [customerId], references: [id])
-  action     String // Acción ejecutada (ej. 'LOGIN')
-  metadata   String // Datos adicionales en texto plano o JSON
-  createdAt  DateTime @default(now()) // Fecha del evento
-}
-
-model Address {
-  id          Int      @id @default(autoincrement()) // ID de la dirección
-  customerId  Int // FK al cliente
-  customer    Customer @relation(fields: [customerId], references: [id])
-  addressLine String // Calle y número
-  district    String // Distrito
-  city        String // Ciudad o provincia
-  phone       String // Teléfono asociado
-}
-
-// === Catálogo de productos ===
-
-model Category {
-  id         Int         @id @default(autoincrement()) // ID de la categoría
-  name       String      @unique // Nombre (Ej. Celulares)
-  products   Product[] // Productos de esta categoría
-  isDeleted  Boolean     @default(false) // Si está eliminada
-  attributes Attribute[] // Atributos relacionados
-  createdAt  DateTime    @default(now()) // Fecha de creación
-  updatedAt  DateTime    @default(now()) // Fecha de actualización
-}
-
-model Brand {
-  id        Int       @id @default(autoincrement()) // ID de la marca
-  name      String    @unique // Nombre (Ej. Apple, Samsung)
-  isDeleted Boolean   @default(false) // Si está eliminada
-  products  Product[] // Productos de esta marca
-  createdAt DateTime  @default(now()) // Fecha de creación
-  updatedAt DateTime  @default(now()) // Fecha de actualización
-}
-
-model ProductPriceHistory {
-  id        Int      @id @default(autoincrement()) // ID único
-  productId Int // Producto relacionado
-  price     Float // Precio registrado
-  changedAt DateTime @default(now()) // Fecha de cambio
-  reason    String? // Motivo del cambio
-  changedBy Int? // Usuario que hizo el cambio
-
-  user User? @relation("ProductPriceHistoryChangedBy", fields: [changedBy], references: [id])
-}
-
-model Product {
-  id              Int                 @id @default(autoincrement()) // ID del producto general
-  title           String // Título visible al cliente
-  description     String // Descripción completa
-  price           Float // Precio base de referencia
-  stock           Int // Stock total (si no se usa variantes)
-  categoryId      Int // FK a categoría
-  brandId         Int // FK a marca
-  isActive        Boolean             @default(true) // Está habilitado en tienda
-  isPreorder      Boolean             @default(false) // Si está disponible en preventa
-  commissionType  CommissionType // Tipo de comisión ('fixed', 'percent')
-  commissionValue Float // Valor de la comisión
-  status          ProductStatus       @default(ACTIVE)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @default(now())
-  category        Category            @relation(fields: [categoryId], references: [id])
-  brand           Brand               @relation(fields: [brandId], references: [id])
-  images          ProductImage[] // Galería de imágenes
-  items           ProductItem[] // Ítems únicos si aplica
-  attributes      ProductAttribute[] // Atributos asignados
-  variants        ProductVariant[] // Variantes con stock propio
-  tags            ProductTag[] // Etiquetas de búsqueda
-  reviews         ProductReview[] // Opiniones de clientes
-  wishlists       Wishlist[] // Clientes que lo tienen en wishlist
-  cartItems       CartItem[] // En carritos
-  sales           Sale[] // Ventas relacionadas
-  inventoryMoves  InventoryMovement[] // Movimientos de inventario
-  costDetails     ProductCostDetail[] // Detalles de costo adicionales
-  PurchaseItem    PurchaseItem[]
 }
 
 enum ProductStatus {
@@ -212,97 +653,8 @@ enum ProductStatus {
 }
 
 enum CommissionType {
-  FIXED // Monto fijo por venta
-  PERCENT // Porcentaje del precio de venta
-}
-
-// completado (x)
-model ProductImage {
-  id        Int     @id @default(autoincrement()) // ID de la imagen
-  productId Int // FK al producto
-  product   Product @relation(fields: [productId], references: [id])
-  imageUrl  String // URL de la imagen
-  isPrimary Boolean @default(false) // Si es imagen principal
-}
-
-// completado (x)
-model ProductItem {
-  id             Int                @id @default(autoincrement()) // ID del ítem único
-  productId      Int // FK al producto padre
-  product        Product            @relation(fields: [productId], references: [id])
-  serialCode     String             @unique // Código de serie (único por ítem)
-  images         ProductItemImage[]
-  condition      String // Estado físico (ej. 'como nuevo')
-  functionality  String // Estado funcional (ej. '100% operativa')
-  purchaseItemId Int?
-  purchaseItem   PurchaseItem?      @relation(fields: [purchaseItemId], references: [id])
-
-  available         Boolean             @default(true) // Disponible para venta
-  cost              Float // Costo del producto
-  salePrice         Float // Precio de venta asignado
-  sold              Boolean             @default(false) // Si ya fue vendido
-  createdAt         DateTime            @default(now()) // Fecha de ingreso
-  ProductCostDetail ProductCostDetail[]
-  Sale              Sale[]
-}
-
-// completado (x)
-model ProductItemImage {
-  id          Int         @id @default(autoincrement())
-  itemId      Int
-  imageUrl    String
-  isPrimary   Boolean     @default(false)
-  productItem ProductItem @relation(fields: [itemId], references: [id])
-
-  @@unique([itemId, imageUrl])
-}
-
-//completado (x)
-model Attribute {
-  id               Int                @id @default(autoincrement()) // ID del atributo
-  name             String // Nombre del atributo (Ej. Color)
-  categoryId       Int // Categoría a la que pertenece
-  category         Category           @relation(fields: [categoryId], references: [id])
-  values           AttributeValue[] // Valores posibles
-  ProductAttribute ProductAttribute[]
-  VariantAttribute VariantAttribute[]
-}
-
-//completado(x)
-model AttributeValue {
-  id               Int                @id @default(autoincrement()) // ID del valor
-  attributeId      Int // FK al atributo
-  attribute        Attribute          @relation(fields: [attributeId], references: [id])
-  value            String // Valor concreto (Ej. 'Rojo')
-  ProductAttribute ProductAttribute[]
-  VariantAttribute VariantAttribute[]
-}
-
-//completado(x)
-model ProductAttribute {
-  id          Int            @id @default(autoincrement()) // ID del vínculo
-  productId   Int // FK al producto
-  attributeId Int // FK al atributo
-  valueId     Int // FK al valor
-  product     Product        @relation(fields: [productId], references: [id])
-  attribute   Attribute      @relation(fields: [attributeId], references: [id])
-  value       AttributeValue @relation(fields: [valueId], references: [id])
-}
-
-// === Inventario y costos ===
-
-model InventoryMovement {
-  id         Int                         @id @default(autoincrement()) // ID del movimiento
-  productId  Int // FK al producto
-  product    Product                     @relation(fields: [productId], references: [id])
-  variantId  Int? // FK a variante (si aplica)
-  variant    ProductVariant?             @relation(fields: [variantId], references: [id])
-  sourceType InventoryMovementSourceType // Origen del movimiento ('purchase', 'sale', etc.)
-  sourceId   Int // ID de la fuente (ej. ID de compra o venta)
-  quantity   Int // Cantidad movida
-  direction  InventoryMovementDirection // Dirección ('IN', 'OUT')
-  reason     String // Razón o comentario del movimiento
-  createdAt  DateTime                    @default(now()) // Fecha del movimiento
+  FIXED
+  PERCENT
 }
 
 enum InventoryMovementDirection {
@@ -317,20 +669,6 @@ enum InventoryMovementSourceType {
   RETURN
 }
 
-model ProductCostDetail {
-  id             Int            @id @default(autoincrement()) // ID del detalle de costo
-  productItemId  Int? // FK al ítem (si aplica)
-  purchaseItemId Int? // FK a compra (si aplica)
-  productItem    ProductItem?   @relation(fields: [productItemId], references: [id])
-  purchaseItem   PurchaseItem?  @relation(fields: [purchaseItemId], references: [id])
-  type           CostDetailType // Tipo de costo ('envío', 'impuesto', etc.)
-  description    String // Descripción del costo
-  amount         Float // Monto del costo
-  createdAt      DateTime       @default(now()) // Fecha de registro
-  Product        Product?       @relation(fields: [productId], references: [id])
-  productId      Int?
-}
-
 enum CostDetailType {
   SHIPPING
   TAX
@@ -338,74 +676,10 @@ enum CostDetailType {
   OTHER
 }
 
-// === Compras ===
-
-// completado (x)
-model Purchase {
-  id           Int            @id @default(autoincrement()) // ID de la compra
-  providerName String // Nombre del proveedor
-  invoiceCode  String // Código/factura del proveedor
-  purchaseDate DateTime // Fecha de compra
-  createdAt    DateTime       @default(now()) // Fecha de registro
-  items        PurchaseItem[] // Ítems comprados
-}
-
-// completado (x)
-model PurchaseItem {
-  id           Int                 @id @default(autoincrement()) // ID del ítem
-  purchaseId   Int // FK a compra
-  productId    Int // FK al producto
-  unitCost     Float // Costo unitario
-  quantity     Int // Cantidad comprada
-  productItems ProductItem[] // opcional
-  status       PurchaseItemStatus // Estado (recibido, pendiente, etc.)
-  createdAt    DateTime            @default(now()) // Fecha de registro
-  purchase     Purchase            @relation(fields: [purchaseId], references: [id])
-  product      Product             @relation(fields: [productId], references: [id])
-  costDetails  ProductCostDetail[] // Detalles de costo asociados
-  sales        Sale[] // Ventas relacionadas (si aplica)
-}
-
 enum PurchaseItemStatus {
   PENDING
   RECEIVED
   REJECTED
-}
-
-// === Ventas ===
-
-// completado (x)
-model Sale {
-  id                      Int             @id @default(autoincrement()) // ID de la venta
-  userId                  Int // Vendedor que realizó la venta
-  customerId              Int // Cliente que compró
-  productId               Int // Producto vendido
-  productItemId           Int? // Ítem único si aplica
-  purchaseItemId          Int? // Relación con ítem de compra
-  variantId               Int? // Relación con variante (si aplica)
-  variant                 ProductVariant? @relation(fields: [variantId], references: [id])
-  quantity                Int // Cantidad vendida
-  notes                   String? // Notas adicionales
-  salePrice               Float // Precio unitario de venta
-  totalAmount             Float // Total de la venta
-  status                  SalesStatus     @default(PENDING) // Estado de la venta (completada, pendiente, etc.)
-  type                    SaleType // Tipo de venta ('normal', 'preventa', etc.)
-  costTotal               Float // Costo total de la venta
-  profitTotal             Float // Utilidad generada
-  isEmailVerified         Boolean         @default(false) // Email del cliente verificado
-  isPhoneVerified         Boolean         @default(false) // Teléfono del cliente verificado
-  commissionBasedOnProfit Boolean         @default(false) // ¿Comisión sobre ganancia?
-  createdAt               DateTime        @default(now()) // Fecha de venta
-  user                    User            @relation(fields: [userId], references: [id])
-  customer                Customer        @relation(fields: [customerId], references: [id])
-  product                 Product         @relation(fields: [productId], references: [id])
-  productItem             ProductItem?    @relation(fields: [productItemId], references: [id])
-  purchaseItem            PurchaseItem?   @relation(fields: [purchaseItemId], references: [id])
-  shipment                Shipment?
-  payments                Payment[]
-  commission              Commission?
-  return                  Return?
-  Coupon                  Coupon[]
 }
 
 enum SalesStatus {
@@ -421,13 +695,21 @@ enum SaleType {
   PREORDER
 }
 
-model CapitalTransaction {
-  id          Int         @id @default(autoincrement())
-  type        CapitalType // INJECTION, PURCHASE_EXPENSE, OPERATIONAL_EXPENSE, SALE_PROFIT, DEVOLUTION_COST, WITHDRAWAL
-  amount      Float
-  description String
-  referenceId Int? // opcional: id de la venta, compra, devolución, etc.
-  createdAt   DateTime    @default(now())
+enum CapitalAccountName {
+  CASH
+  INVENTORY
+  PROFITS
+  COMMISSIONS
+}
+
+enum CapitalSourceType {
+  SALE
+  PURCHASE
+  RETURN
+  SHIPMENT
+  EXPENSE
+  WITHDRAWAL
+  OTHER
 }
 
 enum CapitalType {
@@ -437,32 +719,17 @@ enum CapitalType {
   SALE_PROFIT
   DEVOLUTION_COST
   WITHDRAWAL
+  TRANSFER_IN
+  TRANSFER_OUT
 }
 
-model Shipment {
-  id               Int            @id @default(autoincrement()) // ID del envío
-  saleId           Int            @unique // FK a venta
-  trackingCode     String // Código de seguimiento
-  carrier          String // Empresa de envío
-  shippingType     ShippingType // Tipo de envío (normal, express...)
-  shippingMethodId Int
-  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id])
-  shippingCost     Float // Costo del envío
-  paidBy           ShippingPayer // Quién pagó el envío (cliente, empresa...)
-  status           ShipmentStatus // Estado del envío
-  deliveredAt      DateTime? // Fecha de entrega
-  createdAt        DateTime       @default(now()) // Fecha de creación
-
-  sale Sale @relation(fields: [saleId], references: [id])
-}
-
-model ShippingMethod {
-  id          Int        @id @default(autoincrement()) // ID único
-  name        String // Nombre (Ej: Estándar, Express, Olva)
-  description String? // Descripción opcional
-  isActive    Boolean    @default(true) // Habilitado o no
-  createdAt   DateTime   @default(now())
-  shipments   Shipment[] // Relación con envíos
+enum ExpenseType {
+  SALARY
+  MARKETING
+  PLATFORM
+  RENT
+  LOGISTICS
+  OTHER
 }
 
 enum ShipmentStatus {
@@ -485,86 +752,15 @@ enum ShippingPayer {
   SELLER
 }
 
-model PaymentMethod {
-  id                   Int       @id @default(autoincrement()) // ID del método de pago
-  name                 String // Nombre (Yape, Plin, Visa...)
-  isActive             Boolean   @default(true) // Si está habilitado
-  supportsInstallments Boolean   @default(false) // ¿Permite cuotas?
-  createdAt            DateTime  @default(now()) // Fecha de creación
-  payments             Payment[] // Pagos con este método
-}
-
-model Payment {
-  id              Int               @id @default(autoincrement()) // ID del pago
-  saleId          Int // Venta asociada
-  paymentMethodId Int // Método usado
-  totalPaid       Float // Total pagado
-  status          PaymentStatus     @default(PENDING) // Estado del pago (completado, fallido...)
-  paidAt          DateTime? // Fecha de pago efectiva
-  createdAt       DateTime          @default(now()) // Fecha de registro
-  sale            Sale              @relation(fields: [saleId], references: [id])
-  paymentMethod   PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
-  installments    SaleInstallment[] // Cuotas si las hay
-}
-
 enum PaymentStatus {
   COMPLETED
   FAILED
   PENDING
 }
 
-model InstallmentPlan {
-  id                Int               @id @default(autoincrement()) // ID del plan de cuotas
-  name              String // Nombre del plan
-  interestRate      Float // Tasa de interés
-  totalInstallments Int // Cuotas totales
-  isActive          Boolean           @default(true) // ¿Activo?
-  createdAt         DateTime          @default(now()) // Fecha de registro
-  installments      SaleInstallment[] // Cuotas asociadas
-}
-
-model SaleInstallment {
-  id                Int             @id @default(autoincrement()) // ID de cuota
-  paymentId         Int // FK al pago
-  installmentPlanId Int // FK al plan
-  installmentNumber Int // Nro. de cuota
-  dueDate           DateTime // Fecha de vencimiento
-  amount            Float // Monto de la cuota
-  paid              Boolean         @default(false) // ¿Pagado?
-  paidAt            DateTime? // Fecha de pago si aplica
-  payment           Payment         @relation(fields: [paymentId], references: [id])
-  plan              InstallmentPlan @relation(fields: [installmentPlanId], references: [id])
-}
-
-// === Comisiones y retiros ===
-
-// completado (x)
-model Commission {
-  id        Int              @id @default(autoincrement()) // ID de la comisión
-  saleId    Int              @unique // FK a la venta (único)
-  userId    Int // Usuario que recibe comisión
-  amount    Float // Monto de la comisión
-  status    CommissionStatus @default(PENDING) // Estado (pendiente, pagado...)
-  createdAt DateTime         @default(now()) // Fecha de registro
-
-  sale Sale @relation(fields: [saleId], references: [id])
-  user User @relation(fields: [userId], references: [id])
-}
-
 enum CommissionStatus {
   PENDING
   PAID
-}
-
-model WithdrawalRequest {
-  id        Int              @id @default(autoincrement()) // ID del retiro solicitado
-  userId    Int // Usuario solicitante
-  amount    Float // Monto a retirar
-  status    WithdrawalStatus // Estado del retiro (pendiente, aprobado, rechazado)
-  note      String? // Nota adicional del usuario o admin
-  createdAt DateTime         @default(now()) // Fecha de solicitud
-  updatedAt DateTime         @default(now()) // Última actualización
-  user      User             @relation(fields: [userId], references: [id])
 }
 
 enum WithdrawalStatus {
@@ -574,54 +770,16 @@ enum WithdrawalStatus {
   CANCELED
 }
 
-// === Promociones y cupones ===
-
-model Coupon {
-  id           Int        @id @default(autoincrement()) // ID del cupón
-  code         String     @unique // Código único
-  discountType CouponType // Tipo de descuento ('percent', 'amount')
-  amount       Float // Monto del descuento
-  usedBySaleId Int? // FK a venta donde se usó (nullable)
-  isActive     Boolean    @default(true) // Si está activo
-  expiresAt    DateTime? // Fecha de expiración opcional
-  usedInSale   Sale?      @relation(fields: [usedBySaleId], references: [id])
-}
-
 enum CouponType {
-  PERCENT // Porcentaje de descuento
-  AMOUNT // Monto fijo de descuento
-}
-
-model Promotion {
-  id           Int           @id @default(autoincrement()) // ID de la promoción
-  title        String // Título visible
-  description  String // Descripción de la promo
-  discountType CouponType // Tipo de descuento ('percent', 'amount')
-  amount       Float // Valor de descuento
-  appliesTo    PromotionType // Aplica a: 'category', 'product', etc.
-  referenceId  Int // ID de la entidad a la que aplica
-  isActive     Boolean       @default(true) // ¿Está activa?
-  startsAt     DateTime // Inicio de la promo
-  endsAt       DateTime // Fin de la promo
+  PERCENT
+  AMOUNT
 }
 
 enum PromotionType {
-  CATEGORY // Aplica a una categoría
-  PRODUCT // Aplica a un producto específico
-  BRAND // Aplica a una marca
-  SELLER // Aplica a un vendedor
-}
-
-// === Devoluciones ===
-
-model Return {
-  id         Int              @id @default(autoincrement()) // ID de la devolución
-  saleId     Int              @unique // FK a la venta
-  reason     String // Motivo de la devolución
-  resolution ReturnResolution // Acción tomada (reembolso, reemplazo...)
-  cost       Float // Costo asumido en la devolución
-  createdAt  DateTime         @default(now()) // Fecha de la devolución
-  sale       Sale             @relation(fields: [saleId], references: [id])
+  CATEGORY
+  PRODUCT
+  BRAND
+  SELLER
 }
 
 enum ReturnResolution {
@@ -629,30 +787,6 @@ enum ReturnResolution {
   REPLACEMENT
   CREDIT
   NONE
-}
-
-// === Configuración ===
-
-model Setting {
-  id          Int    @id @default(autoincrement()) // ID de la configuración
-  key         String @unique // Clave única (ej. 'tax_rate')
-  value       String // Valor de la configuración
-  description String // Descripción para el admin
-}
-
-// === Auditoría y seguridad ===
-
-model AuditLog {
-  id        Int         @id @default(autoincrement()) // ID del log
-  userId    Int // Usuario que realizó la acción
-  action    AuditAction // Acción realizada ('login', 'update_sale', etc.)
-  entity    EntityType // Entidad afectada ('Sale', 'Product', ...)
-  entityId  Int // ID de la entidad
-  metadata  String // Datos adicionales
-  createdAt DateTime    @default(now()) // Fecha de la acción
-  ip        String?
-  userAgent String?
-  user      User        @relation(fields: [userId], references: [id])
 }
 
 enum EntityType {
@@ -673,157 +807,9 @@ enum AuditAction {
   SALE_COMPLETED
 }
 
-model EntityChangeLog {
-  id            Int         @id @default(autoincrement()) // ID del log de cambios
-  entityType    EntityType // Tipo de entidad ('Product', 'Sale')
-  entityId      Int // ID de la entidad
-  changedBy     Int // Usuario que realizó el cambio
-  changeType    AuditAction // Tipo de cambio ('CREATE', 'UPDATE', 'DELETE')
-  changeSummary String // Descripción del cambio
-  diff          Json // JSON con los cambios
-  createdAt     DateTime    @default(now()) // Fecha del cambio
-  user          User        @relation("EntityChangedBy", fields: [changedBy], references: [id])
-}
-
-// === Referidos ===
-
-model Referral {
-  id             Int      @id @default(autoincrement()) // ID del referido
-  referrerId     Int // Usuario que refiere
-  referredUserId Int // Usuario referido
-  createdAt      DateTime @default(now()) // Fecha del referido
-
-  referrer User @relation("Referrer", fields: [referrerId], references: [id])
-  referred User @relation("Referred", fields: [referredUserId], references: [id])
-}
-
-// === Notificaciones ===
-
-model Notification {
-  id        Int      @id @default(autoincrement()) // ID de la notificación
-  userId    Int // Usuario destinatario
-  title     String // Título de la notificación
-  body      String // Cuerpo o mensaje
-  isRead    Boolean  @default(false) // Leída o no
-  createdAt DateTime @default(now()) // Fecha de creación
-
-  user User @relation(fields: [userId], references: [id])
-}
-
-// === Wishlist ===
-
-model Wishlist {
-  id         Int      @id @default(autoincrement()) // ID del registro en wishlist
-  customerId Int // FK al cliente
-  productId  Int // FK al producto
-  createdAt  DateTime @default(now()) // Fecha de adición
-  customer   Customer @relation(fields: [customerId], references: [id])
-  product    Product  @relation(fields: [productId], references: [id])
-}
-
-// === Reseñas de productos ===
-
-model ProductReview {
-  id         Int      @id @default(autoincrement()) // ID de la reseña
-  productId  Int // FK al producto
-  customerId Int // FK al cliente
-  rating     Int // Puntuación (1-5)
-  comment    String // Comentario escrito
-  createdAt  DateTime @default(now()) // Fecha de creación
-
-  product  Product  @relation(fields: [productId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
-}
-
-// === Carrito ===
-
-model CartSession {
-  id           Int      @id @default(autoincrement()) // ID del carrito
-  customerId   Int? // Cliente asociado (opcional)
-  sessionToken String   @unique // Token de sesión
-  createdAt    DateTime @default(now()) // Fecha de creación
-
-  customer Customer?  @relation(fields: [customerId], references: [id])
-  items    CartItem[]
-}
-
-model CartItem {
-  id            Int      @id @default(autoincrement()) // ID del ítem en carrito
-  cartSessionId Int // FK al carrito
-  productId     Int // Producto agregado
-  quantity      Int // Cantidad
-  addedAt       DateTime @default(now()) // Fecha de adición
-
-  cartSession CartSession @relation(fields: [cartSessionId], references: [id])
-  product     Product     @relation(fields: [productId], references: [id])
-}
-
-// === Etiquetas de producto ===
-
-model ProductTag {
-  id        Int    @id @default(autoincrement()) // ID de la etiqueta
-  productId Int // FK al producto
-  tag       String // Texto de la etiqueta
-
-  product Product @relation(fields: [productId], references: [id])
-}
-
-// === Variantes de producto ===
-
-// completado (x)
-model ProductVariant {
-  id             Int                 @id @default(autoincrement()) // ID de la variante
-  productId      Int // FK al producto base
-  sku            String              @unique // Código SKU único
-  price          Float // Precio de la variante
-  stock          Int // Stock disponible
-  inventoryMoves InventoryMovement[] // Movimientos de inventario
-  sales          Sale[] // Ventas relacionadas
-  imageUrl       String // Imagen de la variante
-  isActive       Boolean             @default(true) // Activa o no
-  createdAt      DateTime            @default(now()) // Fecha de creación
-
-  product    Product            @relation(fields: [productId], references: [id])
-  attributes VariantAttribute[]
-}
-
-// completado (x)
-model VariantAttribute {
-  id          Int @id @default(autoincrement()) // ID del atributo de variante
-  variantId   Int // FK a la variante
-  attributeId Int // FK al tipo de atributo
-  valueId     Int // FK al valor del atributo
-
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
-  attribute Attribute      @relation(fields: [attributeId], references: [id])
-  value     AttributeValue @relation(fields: [valueId], references: [id])
-}
-
-// === Proveedores externos de login ===
-
-model LoginAttempt {
-  id         Int                @id @default(autoincrement()) // ID del intento
-  userId     Int? // Usuario (nullable)
-  loginInput String // Email o username usado
-  ipAddress  String // IP origen
-  status     LoginAttemptStatus // SUCCESS o FAIL
-  createdAt  DateTime           @default(now()) // Fecha del intento
-  user       User?              @relation(fields: [userId], references: [id])
-}
-
 enum LoginAttemptStatus {
   SUCCESS
   FAIL
-}
-
-model UserProvider {
-  id             Int              @id @default(autoincrement()) // ID del proveedor
-  userId         Int // FK al usuario
-  provider       UserProviderType // google, facebook, etc.
-  providerUserId String // ID único del proveedor
-  email          String // Email confirmado por el proveedor
-  createdAt      DateTime         @default(now()) // Fecha de enlace
-  user           User             @relation(fields: [userId], references: [id])
 }
 
 enum UserProviderType {

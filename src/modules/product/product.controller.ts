@@ -25,6 +25,7 @@ export class ProductController {
   create(@Body() dto: CreateProductDto) {
     return this.service.create(dto);
   }
+
   @Auth('SUPERADMIN', 'ADMIN', 'SELLER')
   @Get()
   findAll(@Query() query: FilterProductDto) {

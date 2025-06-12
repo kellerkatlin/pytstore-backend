@@ -13,7 +13,7 @@ export class CommissionController {
   @Auth('SELLER')
   @Get()
   async getMyCommissions(
-    @ActiveUser('id') userId: number,
+    @ActiveUser('sub') userId: number,
     @Query() query: FilterCommissionDto,
   ) {
     const data = await this.service.findAllByUser(userId, query);
@@ -22,7 +22,7 @@ export class CommissionController {
 
   @Auth('SELLER')
   @Get('total')
-  async getMyEarnings(@ActiveUser('id') userId: number) {
+  async getMyEarnings(@ActiveUser('sub') userId: number) {
     const total = await this.service.getTotalEarnings(userId);
     return ok({ total }, 'Total de comisiones pagadas');
   }
