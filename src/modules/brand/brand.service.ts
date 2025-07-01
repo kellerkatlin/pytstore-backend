@@ -15,6 +15,7 @@ export class BrandService {
   private readonly select = {
     id: true,
     name: true,
+    status: true,
     createdAt: true,
     updatedAt: true,
   };
@@ -101,6 +102,7 @@ export class BrandService {
       {
         id: brand.id,
         name: brand.name,
+        status: brand.status,
         createdAt: brand.createdAt,
         updatedAt: brand.updatedAt,
       },
@@ -125,6 +127,7 @@ export class BrandService {
       where: { id },
       data: {
         name: dto.name,
+        status: dto.status,
       },
       select: this.select,
     });
