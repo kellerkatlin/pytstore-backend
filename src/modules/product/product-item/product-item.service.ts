@@ -117,13 +117,7 @@ export class ProductItemService {
   }
 
   async findAllUniqueProducts(query: FilterProductDto) {
-    const {
-      page = 1,
-      limit = 10,
-      search = '',
-      sortBy = 'createdAt',
-      order = 'desc',
-    } = query;
+    const { page = 1, limit = 10, search = '' } = query;
 
     const skip = (page - 1) * limit;
     const isNumeric = !isNaN(Number(search));
