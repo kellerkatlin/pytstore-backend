@@ -4,7 +4,7 @@ import { CreateExpenseDto } from './dto/create-expense.dto';
 import { ExpenseService } from './expense.service';
 import { ActiveUser } from 'src/common/decorators/active-user.decorator';
 
-@Controller('expense')
+@Controller('expenses')
 export class ExpenseController {
   constructor(private readonly service: ExpenseService) {}
 

@@ -22,6 +22,7 @@ export class BrandController {
   async create(@Body() dto: CreateBrandDto) {
     return await this.brandService.create(dto);
   }
+
   @Get()
   async findAll(
     @Query('page') page = 1,

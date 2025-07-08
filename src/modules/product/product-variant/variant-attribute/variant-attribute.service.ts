@@ -12,28 +12,47 @@ export class VariantAttributeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async assign(dto: CreateVariantAttributeDto) {
+    // 1. Buscar la variante con su producto
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: dto.variantId },
       include: { product: true },
     });
     if (!variant) throw new NotFoundException('Variante no encontrada');
 
+    // 2. Verificar que el atributo existe
     const attribute = await this.prisma.attribute.findUnique({
       where: { id: dto.attributeId },
     });
-    if (!attribute || attribute.categoryId !== variant.product.categoryId) {
+    if (!attribute) throw new NotFoundException('Atributo no encontrado');
+
+    // 3. Validar que el atributo pertenece a un producto
+
+    const productAttribute = await this.prisma.productAttribute.findFirst({
+      where: {
+        productId: variant.productId,
+        attributeId: dto.attributeId,
+      },
+      include: {
+        values: true,
+      },
+    });
+
+    if (!productAttribute) {
       throw new ConflictException(
-        'Atributo no válido para la categoría del producto',
+        'Este atributo no está definido para el producto base',
       );
     }
 
-    const value = await this.prisma.attributeValue.findUnique({
-      where: { id: dto.valueId },
-    });
-    if (!value || value.attributeId !== dto.attributeId) {
-      throw new ConflictException('Valor no corresponde al atributo');
+    const isValidValue = productAttribute.values.some(
+      (v) => v.valueId === dto.valueId,
+    );
+    if (!isValidValue) {
+      throw new ConflictException(
+        'El valor indicado no está permitido para este atributo del producto',
+      );
     }
 
+    // 5. Verificar si ya está asignado
     const exists = await this.prisma.variantAttribute.findFirst({
       where: {
         variantId: dto.variantId,
@@ -43,9 +62,13 @@ export class VariantAttributeService {
     if (exists)
       throw new ConflictException('Atributo ya asignado a esta variante');
 
+    // 6. Crear el registro
     const data = await this.prisma.variantAttribute.create({
       data: dto,
-      include: { attribute: true, value: true },
+      include: {
+        attribute: true,
+        value: true,
+      },
     });
 
     return created(data, 'Atributo asignado a variante');

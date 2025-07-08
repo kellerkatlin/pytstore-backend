@@ -7,7 +7,7 @@ import { ok } from 'src/common/helpers/response.helper';
 export class CommissionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAllByUser(userId: number, filter: FilterCommissionDto) {
+  async findAllByUser(userId: number, filter: FilterCommissionDto) {
     return this.prisma.commission.findMany({
       where: {
         userId,
@@ -17,10 +17,19 @@ export class CommissionService {
         sale: {
           select: {
             id: true,
-            product: { select: { title: true } },
+            createdAt: true,
             totalAmount: true,
             profitTotal: true,
-            createdAt: true,
+            saleItems: {
+              select: {
+                product: { select: { title: true } },
+                variant: {
+                  select: { sku: true },
+                },
+                quantity: true,
+                unitPrice: true,
+              },
+            },
           },
         },
       },
@@ -38,29 +47,43 @@ export class CommissionService {
   }
 
   async getSummary(userId: number) {
-    const [pending, paid] = await this.prisma.$transaction([
-      this.prisma.commission.aggregate({
-        _sum: { amount: true },
-        where: { userId, status: 'PENDING' },
-      }),
-      this.prisma.commission.aggregate({
-        _sum: { amount: true },
-        where: { userId, status: 'PAID' },
-      }),
-    ]);
+    const [pendingCommissions, paidCommissions, pendingWithdrawals] =
+      await this.prisma.$transaction([
+        this.prisma.commission.aggregate({
+          _sum: { amount: true },
+          where: { userId, status: 'PENDING' },
+        }),
+        this.prisma.commission.aggregate({
+          _sum: { amount: true },
+          where: { userId, status: 'PAID' },
+        }),
+        this.prisma.withdrawalRequest.aggregate({
+          _sum: { amount: true },
+          where: {
+            userId,
+            status: 'PENDING', // aún no aprobado
+          },
+        }),
+      ]);
 
-    const totalPending = pending._sum.amount ?? 0;
-    const totalPaid = paid._sum.amount ?? 0;
-    const totalEarned = totalPending + totalPaid;
+    const totalPendingCommissions = pendingCommissions._sum.amount ?? 0;
+    const totalPaid = paidCommissions._sum.amount ?? 0;
+    const totalWithdrawRequested = pendingWithdrawals._sum.amount ?? 0;
+
+    const totalEarned = totalPendingCommissions + totalPaid;
+    const availableToWithdraw =
+      totalPendingCommissions - totalWithdrawRequested;
 
     return ok(
       {
         totalEarned,
-        totalPending,
         totalPaid,
-        canWithdraw: totalPending > 0,
+        totalPending: totalPendingCommissions,
+        pendingWithdrawals: totalWithdrawRequested,
+        availableToWithdraw,
+        canWithdraw: availableToWithdraw > 0,
       },
-      'Resumen de comisiones obtenido correctamente',
+      'Resumen de comisiones actualizado correctamente',
     );
   }
 }

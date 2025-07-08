@@ -1,7 +1,16 @@
 import { SaleType } from '@prisma/client';
-import { IsNumber, IsOptional, IsString, IsEnum, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsEnum,
+  Min,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
 
-export class CreateSaleDto {
+export class CreateSaleItemDto {
   @IsNumber()
   productId: number;
 
@@ -18,21 +27,32 @@ export class CreateSaleDto {
   quantity: number;
 
   @IsNumber()
+  @Min(0)
   salePrice: number;
+}
 
+export class CreateSaleDto {
   @IsNumber()
-  customerId: number;
-
-  @IsNumber()
-  userId: number; // vendedor que registró la venta
   @IsOptional()
-  @IsString()
-  referralCode?: string;
+  customerId?: number;
+
+  @IsNumber()
+  userId: number;
+
   @IsOptional()
   @IsEnum(SaleType)
   type?: SaleType;
 
   @IsOptional()
   @IsString()
+  referralCode?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSaleItemDto)
+  items: CreateSaleItemDto[];
 }

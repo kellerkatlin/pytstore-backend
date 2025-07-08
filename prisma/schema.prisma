@@ -13,6 +13,7 @@ model User {
   username              String?               @unique
   email                 String                @unique
   password              String
+  phone                 String?               @unique
   roleId                Int
   referralCode          String                @unique
   isActive              Boolean               @default(true)
@@ -51,16 +52,18 @@ model Role {
 }
 
 model Seller {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @unique
-  ruc          String?  @unique
+  id           Int     @id @default(autoincrement())
+  userId       Int     @unique
+  ruc          String? @unique
   businessName String?
   storeName    String?
   description  String?
   logoUrl      String?
-  isVerified   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id])
+
+  isDeleted  Boolean  @default(false)
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
 }
 
 model SellerRequest {
@@ -88,10 +91,19 @@ model Customer {
   isTemporaryPassword Boolean               @default(false)
   addresses           Address[]
   cartSession         CartSession[]
+  dni                 String?               @unique
+  ruc                 String?               @unique
+  customerType        CustomerType          @default(NATURAL)
+  isDeleted           Boolean               @default(false)
   logs                CustomerActivityLog[]
   reviews             ProductReview[]
   sales               Sale[]
   wishlists           Wishlist[]
+}
+
+enum CustomerType {
+  NATURAL
+  JURIDICAL
 }
 
 model CustomerActivityLog {
@@ -105,31 +117,44 @@ model CustomerActivityLog {
 
 model Address {
   id          Int      @id @default(autoincrement())
-  addressLine String
-  district    String
-  city        String
-  phone       String
+  addressLine String // Calle/Jr/Av/Mz/Lote exacto
+  reference   String? // Opcional: frente al parque, cerca al mercado, etc.
+  district    String // Ej: Miraflores
+  province    String // Ej: Lima
+  department  String // Ej: Lima
+  phone       String // Teléfono del domicilio/contacto
   customerId  Int
   customer    Customer @relation(fields: [customerId], references: [id])
 }
 
 model Category {
-  id         Int         @id @default(autoincrement())
-  name       String      @unique
-  isDeleted  Boolean     @default(false)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @default(now())
-  attributes Attribute[]
-  products   Product[]
+  id        Int            @id @default(autoincrement())
+  status    CategoryStatus @default(ACTIVE)
+  name      String         @unique
+  isDeleted Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @default(now())
+  products  Product[]
+}
+
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model Brand {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  isDeleted Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  status    BrandStatus @default(ACTIVE)
+  isDeleted Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now())
   products  Product[]
+}
+
+enum BrandStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model ProductPriceHistory {
@@ -146,19 +171,20 @@ model Product {
   id              Int                 @id @default(autoincrement())
   title           String
   description     String
-  price           Float
-  stock           Int
   categoryId      Int
   brandId         Int
   isActive        Boolean             @default(true)
   isPreorder      Boolean             @default(false)
   commissionValue Float
+  taxType         TaxAffectationType  @default(GRAVADO)
+  commissionType  CommissionType
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @default(now())
-  commissionType  CommissionType
   status          ProductStatus       @default(ACTIVE)
   cartItems       CartItem[]
   inventoryMoves  InventoryMovement[]
+  gainType        CommissionType // PERCENT o FIXED (para la tienda)
+  gainValue       Float
   brand           Brand               @relation(fields: [brandId], references: [id])
   category        Category            @relation(fields: [categoryId], references: [id])
   attributes      ProductAttribute[]
@@ -168,8 +194,8 @@ model Product {
   reviews         ProductReview[]
   tags            ProductTag[]
   variants        ProductVariant[]
-  PurchaseItem    PurchaseItem[]
-  sales           Sale[]
+  purchaseItem    PurchaseItem[]
+  saleItems       SaleItem[]
   wishlists       Wishlist[]
 }
 
@@ -179,27 +205,58 @@ model ProductImage {
   imageUrl  String
   isPrimary Boolean @default(false)
   product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([productId, imageUrl])
 }
 
 model ProductItem {
-  id                Int                 @id @default(autoincrement())
+  id                Int                    @id @default(autoincrement())
   productId         Int
-  serialCode        String              @unique
-  condition         String
-  functionality     String
-  available         Boolean             @default(true)
-  cost              Float
-  salePrice         Float
-  sold              Boolean             @default(false)
-  createdAt         DateTime            @default(now())
+  serialCode        String                 @unique
+  salePrice         Float?
+  createdAt         DateTime               @default(now())
   purchaseItemId    Int?
+  taxType           TaxAffectationType     @default(GRAVADO)
+  status            ProductItemStatus      @default(NOT_AVAILABLE)
   commissionType    CommissionType?
   commissionValue   Float?
+  gainType          CommissionType // PERCENT o FIXED (para la tienda)
+  gainValue         Float
   ProductCostDetail ProductCostDetail[]
-  product           Product             @relation(fields: [productId], references: [id])
-  purchaseItem      PurchaseItem?       @relation(fields: [purchaseItemId], references: [id])
+  product           Product                @relation(fields: [productId], references: [id])
+  purchaseItem      PurchaseItem?          @relation(fields: [purchaseItemId], references: [id])
   images            ProductItemImage[]
-  Sale              Sale[]
+  attributes        ProductItemAttribute[]
+  saleItems         SaleItem[]
+  isDeleted         Boolean                @default(false)
+  description       String? // descripción extendida
+}
+
+model ProductItemAttribute {
+  id          Int @id @default(autoincrement())
+  itemId      Int
+  attributeId Int
+  valueId     Int
+
+  item      ProductItem    @relation(fields: [itemId], references: [id])
+  attribute Attribute      @relation(fields: [attributeId], references: [id])
+  value     AttributeValue @relation(fields: [valueId], references: [id])
+
+  @@unique([itemId, attributeId]) // un atributo único por ítem
+}
+
+enum ProductCondition {
+  NEW
+  EXCELLENT
+  GOOD
+  FAIR
+}
+
+enum ProductItemStatus {
+  NOT_AVAILABLE // cree el producto pero no lo compre aun
+  ORDERED // lo pedí, aún no llegó
+  IN_STOCK // disponible para venta
+  SOLD // vendido
 }
 
 model ProductItemImage {
@@ -213,34 +270,52 @@ model ProductItemImage {
 }
 
 model Attribute {
-  id               Int                @id @default(autoincrement())
-  name             String
-  categoryId       Int
-  category         Category           @relation(fields: [categoryId], references: [id])
-  values           AttributeValue[]
-  ProductAttribute ProductAttribute[]
-  VariantAttribute VariantAttribute[]
+  id                   Int                    @id @default(autoincrement())
+  name                 String
+  status               AttributeStatus        @default(ACTIVE)
+  values               AttributeValue[]
+  productAttributes    ProductAttribute[]
+  ProductItemAttribute ProductItemAttribute[]
+  VariantAttribute     VariantAttribute[]
 
-  @@unique([name, categoryId])
+  @@unique([name])
+}
+
+enum AttributeStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model AttributeValue {
-  id               Int                @id @default(autoincrement())
-  attributeId      Int
-  value            String
-  attribute        Attribute          @relation(fields: [attributeId], references: [id])
-  ProductAttribute ProductAttribute[]
-  VariantAttribute VariantAttribute[]
+  id                     Int                     @id @default(autoincrement())
+  attributeId            Int
+  value                  String
+  createdAt              DateTime                @default(now())
+  attribute              Attribute               @relation(fields: [attributeId], references: [id])
+  productAttributeValues ProductAttributeValue[]
+  ProductItemAttribute   ProductItemAttribute[]
+  VariantAttribute       VariantAttribute[]
 }
 
 model ProductAttribute {
-  id          Int            @id @default(autoincrement())
+  id          Int                     @id @default(autoincrement())
   productId   Int
   attributeId Int
-  valueId     Int
-  attribute   Attribute      @relation(fields: [attributeId], references: [id])
-  product     Product        @relation(fields: [productId], references: [id])
-  value       AttributeValue @relation(fields: [valueId], references: [id])
+  product     Product                 @relation(fields: [productId], references: [id])
+  attribute   Attribute               @relation(fields: [attributeId], references: [id])
+  values      ProductAttributeValue[]
+
+  @@unique([productId, attributeId])
+}
+
+model ProductAttributeValue {
+  id                 Int              @id @default(autoincrement())
+  productAttributeId Int
+  valueId            Int
+  productAttribute   ProductAttribute @relation(fields: [productAttributeId], references: [id])
+  value              AttributeValue   @relation(fields: [valueId], references: [id])
+
+  @@unique([productAttributeId, valueId])
 }
 
 model InventoryMovement {
@@ -261,20 +336,29 @@ model ProductCostDetail {
   id             Int            @id @default(autoincrement())
   productItemId  Int?
   purchaseItemId Int?
+  saleId         Int? // ✅ NUEVO: relación con ventas
   description    String
+  origin         CostOrigin     @default(PURCHASE)
   amount         Float
   createdAt      DateTime       @default(now())
   productId      Int?
+  documentUrl    String?
   type           CostDetailType
   Product        Product?       @relation(fields: [productId], references: [id])
   productItem    ProductItem?   @relation(fields: [productItemId], references: [id])
   purchaseItem   PurchaseItem?  @relation(fields: [purchaseItemId], references: [id])
+  sale           Sale?          @relation(fields: [saleId], references: [id]) // ✅ relación Prisma
+}
+
+enum CostOrigin {
+  PURCHASE
+  SALE
 }
 
 model Purchase {
   id           Int            @id @default(autoincrement())
   providerName String
-  invoiceCode  String
+  invoiceCode  String         @unique
   purchaseDate DateTime
   createdAt    DateTime       @default(now())
   items        PurchaseItem[]
@@ -292,54 +376,86 @@ model PurchaseItem {
   productItems ProductItem[]
   product      Product             @relation(fields: [productId], references: [id])
   purchase     Purchase            @relation(fields: [purchaseId], references: [id])
-  sales        Sale[]
+  saleItems    SaleItem[]
 }
 
 model Sale {
-  id                      Int             @id @default(autoincrement())
+  id                      Int                 @id @default(autoincrement())
   userId                  Int
-  productId               Int
-  productItemId           Int?
-  purchaseItemId          Int?
-  quantity                Int
+  customerId              Int?
   notes                   String?
-  salePrice               Float
-  totalAmount             Float
   costTotal               Float
   profitTotal             Float
-  commissionBasedOnProfit Boolean         @default(false)
-  createdAt               DateTime        @default(now())
-  customerId              Int
-  isEmailVerified         Boolean         @default(false)
-  isPhoneVerified         Boolean         @default(false)
-  status                  SalesStatus     @default(PENDING)
+  salePrice               Float // <- opcional si deseas totalizar
+  commissionBasedOnProfit Boolean             @default(false)
+  createdAt               DateTime            @default(now())
+  isEmailVerified         Boolean             @default(false)
+  isPhoneVerified         Boolean             @default(false)
+  receiptType             ReceiptType         @default(TICKET)
+  status                  SalesStatus         @default(PENDING)
   type                    SaleType
-  variantId               Int?
+  isDeleted               Boolean             @default(false)
   commission              Commission?
+  subtotal                Float
+  igvAmount               Float
+  totalAmount             Float
+  user                    User                @relation(fields: [userId], references: [id])
+  customer                Customer?           @relation(fields: [customerId], references: [id])
+  saleItems               SaleItem[] // <- NUEVA RELACIÓN
   Coupon                  Coupon[]
   payments                Payment[]
   return                  Return?
-  customer                Customer        @relation(fields: [customerId], references: [id])
-  product                 Product         @relation(fields: [productId], references: [id])
-  productItem             ProductItem?    @relation(fields: [productItemId], references: [id])
-  purchaseItem            PurchaseItem?   @relation(fields: [purchaseItemId], references: [id])
-  user                    User            @relation(fields: [userId], references: [id])
-  variant                 ProductVariant? @relation(fields: [variantId], references: [id])
   shipment                Shipment?
+  costDetails             ProductCostDetail[]
+}
+
+enum ReceiptType {
+  TICKET // venta sin identificación (anónima)
+  BOLETA // requiere DNI
+  FACTURA // requiere RUC
+}
+
+model SaleItem {
+  id             Int             @id @default(autoincrement())
+  saleId         Int
+  productId      Int
+  variantId      Int?
+  productItemId  Int?
+  purchaseItemId Int?
+  quantity       Int
+  unitPrice      Float
+  totalPrice     Float
+  costUnit       Float
+  costTotal      Float
+  profitTotal    Float
+  sale           Sale            @relation(fields: [saleId], references: [id])
+  product        Product         @relation(fields: [productId], references: [id])
+  variant        ProductVariant? @relation(fields: [variantId], references: [id])
+  productItem    ProductItem?    @relation(fields: [productItemId], references: [id])
+  purchaseItem   PurchaseItem?   @relation(fields: [purchaseItemId], references: [id])
+}
+
+enum TaxAffectationType {
+  GRAVADO // Afecto al IGV (18%)
+  INAFECTO // No sujeto al IGV
+  EXONERADO // Exento legalmente
 }
 
 model CapitalTransaction {
-  id            Int               @id @default(autoincrement())
-  type          CapitalType
-  amount        Float
-  description   String
-  referenceId   Int?
-  createdAt     DateTime          @default(now())
-  accountId     Int
-  expenseId     Int?              @unique
-  referenceType CapitalSourceType
-  account       CapitalAccount    @relation(fields: [accountId], references: [id])
-  expense       Expense?          @relation("CapitalExpense")
+  id              Int               @id @default(autoincrement())
+  type            CapitalType
+  amount          Float
+  description     String
+  referenceId     Int?
+  originAccountId Int?
+  createdAt       DateTime          @default(now())
+  accountId       Int?
+  expenseId       Int?              @unique
+  referenceType   CapitalSourceType
+  account         CapitalAccount?   @relation(fields: [accountId], references: [id])
+  originAccount   CapitalAccount?   @relation("OriginAccount", fields: [originAccountId], references: [id])
+
+  expense Expense? @relation("CapitalExpense")
 }
 
 model Expense {
@@ -355,10 +471,11 @@ model Expense {
 }
 
 model CapitalAccount {
-  id           Int                  @id @default(autoincrement())
-  name         CapitalAccountName   @unique
-  description  String?
-  transactions CapitalTransaction[]
+  id                 Int                  @id @default(autoincrement())
+  name               CapitalAccountName   @unique
+  description        String?
+  transactions       CapitalTransaction[]
+  originTransactions CapitalTransaction[] @relation("OriginAccount")
 }
 
 model Shipment {
@@ -378,17 +495,20 @@ model Shipment {
 }
 
 model ShippingMethod {
-  id          Int        @id @default(autoincrement())
-  name        String
-  description String?
-  isActive    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  shipments   Shipment[]
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  description  String?
+  isActive     Boolean       @default(true)
+  shippingType ShippingType
+  paidBy       ShippingPayer
+
+  createdAt DateTime   @default(now())
+  shipments Shipment[]
 }
 
 model PaymentMethod {
   id                   Int       @id @default(autoincrement())
-  name                 String
+  name                 String    @unique
   isActive             Boolean   @default(true)
   supportsInstallments Boolean   @default(false)
   createdAt            DateTime  @default(now())
@@ -401,6 +521,7 @@ model Payment {
   paymentMethodId Int
   totalPaid       Float
   paidAt          DateTime?
+  documentUrl     String?
   createdAt       DateTime          @default(now())
   status          PaymentStatus     @default(PENDING)
   paymentMethod   PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
@@ -432,14 +553,15 @@ model SaleInstallment {
 }
 
 model Commission {
-  id        Int              @id @default(autoincrement())
-  saleId    Int              @unique
-  userId    Int
-  amount    Float
-  createdAt DateTime         @default(now())
-  status    CommissionStatus @default(PENDING)
-  sale      Sale             @relation(fields: [saleId], references: [id])
-  user      User             @relation(fields: [userId], references: [id])
+  id         Int              @id @default(autoincrement())
+  saleId     Int              @unique
+  userId     Int
+  amount     Float
+  paidAmount Float            @default(0)
+  createdAt  DateTime         @default(now())
+  status     CommissionStatus @default(PENDING)
+  sale       Sale             @relation(fields: [saleId], references: [id]) // <-- relación correcta
+  user       User             @relation(fields: [userId], references: [id])
 }
 
 model WithdrawalRequest {
@@ -585,18 +707,24 @@ model ProductTag {
 }
 
 model ProductVariant {
-  id             Int                 @id @default(autoincrement())
-  productId      Int
-  sku            String              @unique
-  price          Float
-  stock          Int
-  imageUrl       String
-  isActive       Boolean             @default(true)
-  createdAt      DateTime            @default(now())
-  inventoryMoves InventoryMovement[]
-  product        Product             @relation(fields: [productId], references: [id])
-  sales          Sale[]
-  attributes     VariantAttribute[]
+  id        Int                @id @default(autoincrement())
+  productId Int
+  sku       String             @unique
+  price     Float
+  taxType   TaxAffectationType @default(GRAVADO)
+
+  stock           Int
+  images          ProductVariantImage[]
+  status          ProductStatus         @default(ACTIVE)
+  createdAt       DateTime              @default(now())
+  inventoryMoves  InventoryMovement[]
+  product         Product               @relation(fields: [productId], references: [id])
+  salesItems      SaleItem[]
+  commissionValue Float?
+  commissionType  CommissionType?
+  gainType        CommissionType?
+  gainValue       Float?
+  attributes      VariantAttribute[]
 }
 
 model VariantAttribute {
@@ -607,6 +735,18 @@ model VariantAttribute {
   attribute   Attribute      @relation(fields: [attributeId], references: [id])
   value       AttributeValue @relation(fields: [valueId], references: [id])
   variant     ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([variantId, attributeId])
+}
+
+model ProductVariantImage {
+  id        Int            @id @default(autoincrement())
+  variantId Int
+  imageUrl  String
+  isPrimary Boolean        @default(false)
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([variantId, imageUrl])
 }
 
 model LoginAttempt {
@@ -683,11 +823,13 @@ enum PurchaseItemStatus {
 }
 
 enum SalesStatus {
-  PENDING
-  PAID
-  CANCELED
-  REFUNDED
-  COMPLETED
+  PENDING // Pedido creado (esperando validación)
+  APPROVED // Pedido aprobado por admin
+  IN_PROCESS // En preparación/despacho
+  PAID // Pago recibido (puede ser online o contraentrega)
+  COMPLETED // Entregado y liquidado (se genera caja y comisión)
+  CANCELED // Anulado
+  REFUNDED // Reintegrada
 }
 
 enum SaleType {
@@ -698,7 +840,6 @@ enum SaleType {
 enum CapitalAccountName {
   CASH
   INVENTORY
-  PROFITS
   COMMISSIONS
 }
 
@@ -760,6 +901,7 @@ enum PaymentStatus {
 
 enum CommissionStatus {
   PENDING
+  PARTIALLY_PAID
   PAID
 }
 

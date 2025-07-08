@@ -1,10 +1,10 @@
-import { IsNumber, IsString } from 'class-validator';
+import { IsNumber, IsPositive } from 'class-validator';
 
 export class CreateProductItemInputDto {
-  @IsString() serialCode: string;
-  @IsString() condition: string;
-  @IsString() functionality: string;
+  @IsNumber()
+  productItemId: number;
 
-  @IsNumber() cost: number;
-  @IsNumber() salePrice: number;
+  @IsPositive()
+  @IsNumber()
+  unitCost: number;
 }

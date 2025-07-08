@@ -1,52 +1,92 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/common/prisma/prisma.service';
 import { CreateAttributeDto } from './dto/create-attribute.dto';
-import { created, ok } from 'src/common/helpers/response.helper';
+import { created, ok, paginated } from 'src/common/helpers/response.helper';
 import { UpdateAttributeDto } from './dto/update-attribute.dto';
+import { Prisma } from '@prisma/client';
 
+const ALLOWED_SORT: Record<string, true> = {
+  id: true,
+  name: true,
+  createdAt: true,
+  updatedAt: true,
+};
 @Injectable()
 export class AttributeService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateAttributeDto) {
-    const category = await this.prisma.category.findUnique({
-      where: { id: dto.categoryId },
+    // Convertir el nombre a minúsculas para validar sin importar mayúsculas/minúsculas
+    const exists = await this.prisma.attribute.findFirst({
+      where: {
+        name: {
+          equals: dto.name.toLowerCase(),
+          mode: 'insensitive',
+        },
+      },
     });
-    if (!category || category.isDeleted) {
-      throw new NotFoundException('Categoría no válida');
+    if (exists) {
+      throw new ConflictException('Ya existe un atributo con ese nombre');
     }
 
     const attribute = await this.prisma.attribute.create({
       data: {
-        name: dto.name,
-        categoryId: dto.categoryId,
+        ...dto,
       },
     });
 
     return created(attribute, 'Atributo creado correctamente');
   }
 
-  async findAll() {
-    const attributes = await this.prisma.attribute.findMany({
-      include: { category: { select: { id: true, name: true } } },
-    });
-    return ok(attributes, 'Lista de atributos');
+  async findAll(
+    page = 1,
+    limit = 10,
+    search = '',
+    sortBy = 'id',
+    order: 'asc' | 'desc' = 'desc',
+  ) {
+    if (!ALLOWED_SORT[sortBy]) sortBy = 'id';
+
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AttributeWhereInput = {
+      name: {
+        contains: search,
+        mode: 'insensitive',
+      },
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.attribute.findMany({
+        skip,
+        take: limit,
+        where,
+        orderBy: { [sortBy]: order },
+      }),
+      this.prisma.attribute.count({ where }),
+    ]);
+
+    return paginated(
+      items,
+      { total, page, lastPage: Math.ceil(total / limit) },
+      'Listado de atributos obtenido correctamente',
+    );
   }
 
-  async findByCategory(categoryId: number) {
-    const category = await this.prisma.category.findUnique({
-      where: { id: categoryId },
+  async findById(id: number) {
+    const attribute = await this.prisma.attribute.findUnique({
+      where: { id },
     });
-    if (!category || category.isDeleted) {
-      throw new NotFoundException('Categoría no encontrada');
+
+    if (!attribute) {
+      throw new NotFoundException('Atributo no encontrado');
     }
 
-    const attributes = await this.prisma.attribute.findMany({
-      where: { categoryId },
-      include: { values: true },
-    });
-
-    return ok(attributes, 'Atributos por categoría');
+    return ok(attribute, 'Atributo obtenido correctamente');
   }
 
   async update(id: number, dto: UpdateAttributeDto) {
@@ -55,7 +95,9 @@ export class AttributeService {
 
     const updated = await this.prisma.attribute.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+      },
     });
 
     return ok(updated, 'Atributo actualizado');

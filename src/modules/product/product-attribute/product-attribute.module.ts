@@ -4,6 +4,6 @@ import { ProductAttributeController } from './product-attribute.controller';
 
 @Module({
   providers: [ProductAttributeService],
-  controllers: [ProductAttributeController]
+  controllers: [ProductAttributeController],
 })
 export class ProductAttributeModule {}

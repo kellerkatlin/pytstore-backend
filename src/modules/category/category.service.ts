@@ -15,6 +15,7 @@ export class CategoryService {
   private readonly select = {
     id: true,
     name: true,
+    status: true,
     createdAt: true,
     updatedAt: true,
   };
@@ -103,6 +104,7 @@ export class CategoryService {
       {
         id: category.id,
         name: category.name,
+        status: category.status,
         createdAt: category.createdAt,
         updatedAt: category.updatedAt,
       },
@@ -126,7 +128,7 @@ export class CategoryService {
     const updatedCategory = await this.prisma.category.update({
       where: { id },
       data: {
-        name: dto.name,
+        ...dto,
       },
       select: this.select,
     });

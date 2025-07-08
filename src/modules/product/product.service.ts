@@ -13,17 +13,17 @@ export class ProductService {
     private readonly prisma: PrismaService,
     private readonly stockService: StockService,
   ) {}
+
   private readonly select = {
     id: true,
     title: true,
     description: true,
-    price: true,
-    stock: true,
     commissionType: true,
     commissionValue: true,
     categoryId: true,
     brandId: true,
     status: true,
+    images: true,
     createdAt: true,
     updatedAt: true,
     category: { select: { id: true, name: true } },
@@ -45,9 +45,26 @@ export class ProductService {
   async create(dto: CreateProductDto) {
     await this.validateRelations(dto.categoryId, dto.brandId);
 
+    const { images, ...rest } = dto;
+
+    if (images?.length) {
+      const hasPrimary = images.some((img) => img.isPrimary);
+      if (!hasPrimary) {
+        images[0].isPrimary = true;
+      }
+    }
     const product = await this.prisma.product.create({
       data: {
-        ...dto,
+        ...rest,
+        status: 'ACTIVE',
+        images: images?.length
+          ? {
+              create: images.map((img) => ({
+                imageUrl: img.imageUrl,
+                isPrimary: img.isPrimary,
+              })),
+            }
+          : undefined,
       },
       select: this.select,
     });
@@ -93,7 +110,7 @@ export class ProductService {
 
   async findOne(id: number) {
     const product = await this.prisma.product.findFirst({
-      where: { id, status: { not: ProductStatus.DELETED } },
+      where: { id, status: { not: 'DELETED' } },
       select: this.select,
     });
     if (!product) throw new NotFoundException('Producto no encontrado');
@@ -101,9 +118,39 @@ export class ProductService {
     return ok(product, 'Producto encontrado');
   }
 
+  async getAttributeValueTree(productId: number) {
+    const attributes = await this.prisma.productAttribute.findMany({
+      where: { productId },
+      include: {
+        attribute: { select: { id: true, name: true } },
+        values: {
+          include: {
+            value: { select: { id: true, value: true } },
+          },
+        },
+      },
+      orderBy: { attribute: { name: 'asc' } },
+    });
+
+    const result = attributes.map((attr) => ({
+      attributeId: attr.attribute.id,
+      name: attr.attribute.name,
+      values: attr.values.map((v) => ({
+        valueId: v.value.id,
+        value: v.value.value,
+      })),
+    }));
+
+    return ok({ productId, attributes: result });
+  }
+
   async update(id: number, dto: UpdateProductDto) {
-    const product = await this.prisma.product.findUnique({ where: { id } });
-    if (!product || product.status === ProductStatus.DELETED) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { images: true },
+    });
+
+    if (!product || product.status === 'DELETED') {
       throw new NotFoundException('Producto no encontrado');
     }
 
@@ -114,24 +161,51 @@ export class ProductService {
       );
     }
 
-    const updated = await this.prisma.product.update({
-      where: { id },
-      data: { ...dto },
-      select: this.select,
-    });
+    const { images, ...rest } = dto;
 
-    return ok(updated, 'Producto actualizado correctamente');
+    return this.prisma.$transaction(async (tx) => {
+      // Actualizar producto
+      const updated = await tx.product.update({
+        where: { id },
+        data: { ...rest },
+        select: this.select,
+      });
+
+      if (images) {
+        // Eliminar imágenes antiguas
+        await tx.productImage.deleteMany({
+          where: { productId: id },
+        });
+
+        const imagesToCreate = images.map((img) => ({
+          productId: id,
+          imageUrl: img.imageUrl,
+          isPrimary: img.isPrimary ?? false,
+        }));
+
+        const hasPrimary = imagesToCreate.some((img) => img.isPrimary);
+        if (!hasPrimary && imagesToCreate.length > 0) {
+          imagesToCreate[0].isPrimary = true;
+        }
+
+        await tx.productImage.createMany({
+          data: imagesToCreate,
+        });
+      }
+
+      return ok(updated, 'Producto actualizado correctamente');
+    });
   }
 
   async remove(id: number) {
     const product = await this.prisma.product.findUnique({ where: { id } });
-    if (!product || product.status === ProductStatus.DELETED) {
+    if (!product || product.status === 'DELETED') {
       throw new NotFoundException('Producto no encontrado');
     }
 
     await this.prisma.product.update({
       where: { id },
-      data: { status: ProductStatus.DELETED },
+      data: { status: 'DELETED' },
     });
 
     return ok(null, 'Producto eliminado correctamente');

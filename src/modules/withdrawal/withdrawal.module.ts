@@ -4,8 +4,8 @@ import { WithdrawalController } from './withdrawal.controller';
 import { CapitalModule } from '../capital/capital.module';
 
 @Module({
-  imports: [CapitalModule],
   providers: [WithdrawalService],
   controllers: [WithdrawalController],
+  imports: [CapitalModule],
 })
 export class WithdrawalModule {}

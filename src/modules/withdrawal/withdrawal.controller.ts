@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { WithdrawalService } from './withdrawal.service';
 import { ActiveUser } from 'src/common/decorators/active-user.decorator';
@@ -21,7 +22,7 @@ export class WithdrawalController {
   // Vendedor: solicitar retiro
   @Auth('SELLER')
   @Post()
-  requestWithdrawal(
+  async requestWithdrawal(
     @ActiveUser() user: JwtPayload,
     @Body() dto: CreateWithdrawalRequestDto,
   ) {
@@ -31,14 +32,26 @@ export class WithdrawalController {
   // Vendedor: ver sus propios retiros
   @Auth('SELLER')
   @Get('my')
-  getMyWithdrawals(@ActiveUser() user: JwtPayload) {
-    return this.withdrawalService.getMyWithdrawals(user.sub);
+  async getMyWithdrawals(
+    @ActiveUser() user: JwtPayload,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.withdrawalService.getMyWithdrawals(
+      user.sub,
+      +page,
+      +limit,
+      startDate,
+      endDate,
+    );
   }
 
   // Admin: cambiar estado de solicitud
   @Auth('SUPERADMIN', 'ADMIN')
   @Patch(':id')
-  updateStatus(
+  async updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateWithdrawalStatusDto,
   ) {
@@ -48,7 +61,17 @@ export class WithdrawalController {
   // Admin: ver todos los retiros
   @Auth('SUPERADMIN', 'ADMIN')
   @Get()
-  getAllForAdmin() {
-    return this.withdrawalService.getAllForAdmin();
+  async getAllForAdmin(
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.withdrawalService.getAllForAdmin(
+      +page,
+      +limit,
+      startDate,
+      endDate,
+    );
   }
 }

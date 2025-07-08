@@ -41,6 +41,14 @@ export class ProductItemImageService {
 
     return ok(images, 'Imágenes del ítem');
   }
+  async findRawByItem(itemId: number) {
+    const images = await this.prisma.productItemImage.findMany({
+      where: { itemId },
+      orderBy: { isPrimary: 'desc' },
+    });
+
+    return images.map((img) => img.imageUrl);
+  }
 
   async remove(id: number) {
     await this.prisma.productItemImage.delete({ where: { id } });

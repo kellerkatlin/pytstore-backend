@@ -4,48 +4,88 @@ import { ok, paginated } from 'src/common/helpers/response.helper';
 import { FilterCapitalTransactionDto } from './dto/filter-capital-transaction.dto';
 import { CapitalAccountName, CapitalType, Prisma } from '@prisma/client';
 import { IncomeStatementDto } from './dto/income-statement.dto';
+import { CreateCapitalTransactionDto } from './dto/create-capital-transaction.dto';
 
 @Injectable()
 export class CapitalService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSummary() {
-    const accounts = await this.prisma.capitalAccount.findMany({
-      include: { transactions: true },
-    });
+    const accounts = await this.prisma.capitalAccount.findMany();
 
-    const summary = accounts.map((account) => {
-      const total = account.transactions.reduce((acc, tx) => {
-        const sign = ['INJECTION', 'SALE_PROFIT'].includes(tx.type) ? 1 : -1;
-        return acc + sign * tx.amount;
-      }, 0);
-      return {
-        account: account.name,
-        total,
-      };
-    });
+    const summary = await Promise.all(
+      accounts.map(async (account) => {
+        const [incoming, outgoing] = await Promise.all([
+          this.prisma.capitalTransaction.aggregate({
+            _sum: { amount: true },
+            where: { accountId: account.id },
+          }),
+          this.prisma.capitalTransaction.aggregate({
+            _sum: { amount: true },
+            where: { originAccountId: account.id },
+          }),
+        ]);
+
+        const totalIn = incoming._sum.amount ?? 0;
+        const totalOut = outgoing._sum.amount ?? 0;
+
+        return {
+          account: account.name,
+          total: totalIn - totalOut,
+        };
+      }),
+    );
 
     return ok(summary, 'Resumen de capital por cuenta');
   }
-
   async getTransactions(query: FilterCapitalTransactionDto) {
-    const { page = 1, limit = 10, accountId, type, referenceType } = query;
+    const {
+      page = 1,
+      limit = 10,
+      type,
+      referenceType,
+      startDate,
+      endDate,
+    } = query;
     const skip = (page - 1) * limit;
 
-    const where = {
-      ...(accountId && { accountId: Number(accountId) }),
+    let accountId: number | undefined;
+
+    if (query.account) {
+      const account = await this.prisma.capitalAccount.findUnique({
+        where: { name: query.account }, // CapitalAccountName
+      });
+
+      if (!account) {
+        throw new Error(`Cuenta ${query.account} no encontrada`);
+      }
+
+      accountId = account.id;
+    }
+
+    const where: Prisma.CapitalTransactionWhereInput = {
+      ...(accountId && { accountId }),
       ...(type && { type }),
       ...(referenceType && { referenceType }),
+      ...(startDate || endDate
+        ? {
+            createdAt: {
+              ...(startDate && { gte: new Date(startDate) }),
+              ...(endDate && { lte: new Date(endDate) }),
+            },
+          }
+        : {}),
     };
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.capitalTransaction.findMany({
         where,
         skip,
-        take: limit,
+        take: +limit,
         orderBy: { createdAt: 'desc' },
         include: {
           account: true,
+          originAccount: true,
         },
       }),
       this.prisma.capitalTransaction.count({ where }),
@@ -81,14 +121,21 @@ export class CapitalService {
   }
 
   async getAvailableCapitalByAccountId(accountId: number): Promise<number> {
-    const txs = await this.prisma.capitalTransaction.findMany({
-      where: { accountId },
-    });
+    const [incoming, outgoing] = await Promise.all([
+      this.prisma.capitalTransaction.aggregate({
+        _sum: { amount: true },
+        where: { accountId },
+      }),
+      this.prisma.capitalTransaction.aggregate({
+        _sum: { amount: true },
+        where: { originAccountId: accountId },
+      }),
+    ]);
 
-    return txs.reduce((total, tx) => {
-      const sign = ['INJECTION', 'SALE_PROFIT'].includes(tx.type) ? 1 : -1;
-      return total + sign * tx.amount;
-    }, 0);
+    const totalIn = incoming._sum.amount ?? 0;
+    const totalOut = outgoing._sum.amount ?? 0;
+
+    return totalIn - totalOut;
   }
 
   async getFullSummary() {
@@ -219,5 +266,26 @@ export class CapitalService {
       retiros,
       utilidadNeta,
     };
+  }
+
+  async createTransaction(dto: CreateCapitalTransactionDto) {
+    const account = await this.prisma.capitalAccount.findUnique({
+      where: { name: dto.account },
+    });
+    if (!account) throw new Error('Cuenta de capital no encontrada');
+
+    const transaction = await this.prisma.capitalTransaction.create({
+      data: {
+        amount: dto.amount,
+        type: dto.type,
+        createdAt: dto.createdAt ?? new Date(),
+        description: dto.description,
+        referenceType: dto.referenceType ?? 'OTHER',
+        referenceId: dto.referenceId ?? null,
+        accountId: account.id,
+      },
+    });
+
+    return ok(transaction, 'Transacción registrada correctamente');
   }
 }

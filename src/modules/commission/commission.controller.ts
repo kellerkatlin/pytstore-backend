@@ -29,7 +29,7 @@ export class CommissionController {
 
   @Auth('SELLER')
   @Get('summary')
-  getMySummary(@ActiveUser() user: JwtPayload) {
+  async getMySummary(@ActiveUser() user: JwtPayload) {
     return this.service.getSummary(user.sub);
   }
 }

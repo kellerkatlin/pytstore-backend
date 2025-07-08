@@ -4,8 +4,8 @@ import { ExpenseService } from './expense.service';
 import { CapitalModule } from '../capital/capital.module';
 
 @Module({
-  imports: [CapitalModule],
   controllers: [ExpenseController],
   providers: [ExpenseService],
+  imports: [CapitalModule],
 })
 export class ExpenseModule {}

@@ -5,7 +5,7 @@ import { ProductImageModule } from './product-image/product-image.module';
 import { ProductVariantModule } from './product-variant/product-variant.module';
 import { ProductAttributeModule } from './product-attribute/product-attribute.module';
 import { ProductItemModule } from './product-item/product-item.module';
-import { StockModule } from 'src/common/services/stock/stock.module';
+import { ServiceCommonModule } from 'src/common/services/service.module';
 
 @Module({
   controllers: [ProductController],
@@ -15,7 +15,7 @@ import { StockModule } from 'src/common/services/stock/stock.module';
     ProductVariantModule,
     ProductAttributeModule,
     ProductItemModule,
-    StockModule,
+    ServiceCommonModule,
   ],
 })
 export class ProductModule {}

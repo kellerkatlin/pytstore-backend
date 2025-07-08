@@ -26,15 +26,18 @@ export class AuthController {
     return this.authService.loginUser(dto, res, req);
   }
 
+  @Auth('SUPERADMIN', 'SELLER')
   @Get('me')
-  @Auth('SUPERADMIN')
   getProfile(@ActiveUser() user: JwtPayload) {
     return ok(user, 'Perfil obtenido correctamente');
   }
 
   @Post('register-user')
-  async registerUser(@Body() dto: RegisterUserDto) {
-    return this.authService.registerUser(dto);
+  async registerUser(
+    @Body() dto: RegisterUserDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.registerUser(dto, res);
   }
 
   @Post('request-seller')
@@ -48,9 +51,13 @@ export class AuthController {
     return this.authService.approveSellerRequest(id);
   }
 
+  @Auth('SUPERADMIN', 'ADMIN')
   @Post('register-seller')
-  async registerSeller(@Body() dto: RegisterSellerDto) {
-    return this.authService.registerSellerAccount(dto);
+  async registerSeller(
+    @Body() dto: RegisterSellerDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.authService.registerSellerAccount(dto, res);
   }
 
   @Post('login-customer')

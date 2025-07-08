@@ -10,10 +10,7 @@ export async function seedCapitalAccounts(prisma: PrismaClient) {
       name: CapitalAccountName.INVENTORY,
       description: 'Valor de productos comprados aún no vendidos',
     },
-    {
-      name: CapitalAccountName.PROFITS,
-      description: 'Ganancias netas acumuladas',
-    },
+
     {
       name: CapitalAccountName.COMMISSIONS,
       description: 'Comisiones generadas para vendedores',

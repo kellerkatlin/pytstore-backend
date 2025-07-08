@@ -1,10 +1,10 @@
-import { IsNotEmpty, IsString, IsInt } from 'class-validator';
+import { AttributeStatus } from '@prisma/client';
+import { IsEnum, IsString } from 'class-validator';
 
 export class CreateAttributeDto {
-  @IsNotEmpty()
   @IsString()
   name: string;
 
-  @IsInt()
-  categoryId: number;
+  @IsEnum(AttributeStatus)
+  status: AttributeStatus;
 }

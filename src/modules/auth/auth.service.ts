@@ -21,7 +21,7 @@ import { RegisterSellerDto } from '../seller/dto/register-seller-account.dto';
 import { Request, Response } from 'express';
 import { UserService } from '../user/user.service';
 import { SellerService } from '../seller/seller.service';
-import { ok } from 'src/common/helpers/response.helper';
+import { created, ok } from 'src/common/helpers/response.helper';
 @Injectable()
 export class AuthService {
   constructor(
@@ -30,6 +30,15 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly sellerService: SellerService,
   ) {}
+
+  private setAuthCookie(res: Response, token: string) {
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24, // 1 día
+    });
+  }
 
   // Login de usuario
   async loginUser(dto: LoginUserDto, res: Response, req: Request) {
@@ -58,12 +67,7 @@ export class AuthService {
 
     const token = await this.jwtService.signAsync(payload);
 
-    res.cookie('access_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24,
-    });
+    this.setAuthCookie(res, token);
 
     return ok(
       {
@@ -76,7 +80,7 @@ export class AuthService {
   }
 
   // Registro de usuario
-  async registerUser(dto: RegisterUserDto) {
+  async registerUser(dto: RegisterUserDto, res: Response) {
     const user = await this.userService.createUser(dto);
 
     const payload: JwtPayload = {
@@ -86,6 +90,9 @@ export class AuthService {
     };
 
     const token = await this.jwtService.signAsync(payload);
+
+    this.setAuthCookie(res, token);
+
     return {
       message: 'Usuario registrado exitosamente ',
       status: HttpStatus.CREATED,
@@ -139,7 +146,7 @@ export class AuthService {
 
   //Registro automático en checkout
 
-  async registerSellerAccount(dto: RegisterSellerDto) {
+  async registerSellerAccount(dto: RegisterSellerDto, res: Response) {
     const request = await this.sellerService.findRequestByToken(dto);
 
     const exists = await this.sellerService.findExistingRequestByEmail(
@@ -162,18 +169,20 @@ export class AuthService {
 
     const token = await this.jwtService.signAsync(payload);
 
-    return {
-      message: 'Cuenta de vendedor creada exitosamente',
-      status: HttpStatus.CREATED,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role.name,
+    this.setAuthCookie(res, token);
+
+    return created(
+      {
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role.name,
+          },
         },
       },
-      token,
-    };
+      'Cuenta de vendedor creada exitosamente',
+    );
   }
 
   // Registro de cliente
@@ -272,9 +281,11 @@ export class AuthService {
       await this.prisma.address.create({
         data: {
           customerId: customer.id,
-          addressLine: dto.address.addressLine,
+          addressLine: dto.address.addressLine ?? '',
+          province: dto.address.province ?? '',
+          reference: dto.address.reference ?? '',
+          department: dto.address.district,
           district: dto.address.district,
-          city: dto.address.city,
           phone: dto.address.phone,
         },
       });

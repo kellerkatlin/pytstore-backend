@@ -1,9 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { CapitalService } from './capital.service';
 import { FilterCapitalTransactionDto } from './dto/filter-capital-transaction.dto';
 import { ok } from 'src/common/helpers/response.helper';
 import { IncomeStatementDto } from './dto/income-statement.dto';
+import { CreateCapitalTransactionDto } from './dto/create-capital-transaction.dto';
 
 @Controller('capital')
 export class CapitalController {
@@ -38,5 +39,11 @@ export class CapitalController {
   async getIncomeStatement(@Query() query: IncomeStatementDto) {
     const data = await this.service.getIncomeStatement(query);
     return ok(data, 'Estado de resultados generado');
+  }
+
+  @Auth('SUPERADMIN')
+  @Post()
+  createTransaction(@Body() dto: CreateCapitalTransactionDto) {
+    return this.service.createTransaction(dto);
   }
 }

@@ -4,6 +4,7 @@ import { ProductItemImageController } from './product-item-image.controller';
 
 @Module({
   providers: [ProductItemImageService],
-  controllers: [ProductItemImageController]
+  controllers: [ProductItemImageController],
+  exports: [ProductItemImageService],
 })
 export class ProductItemImageModule {}

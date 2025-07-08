@@ -1,13 +1,16 @@
 import {
   IsOptional,
   IsNumber,
-  IsPositive,
   IsEnum,
   IsInt,
   Min,
   IsString,
+  ValidateNested,
+  ArrayMaxSize,
 } from 'class-validator';
 import { CommissionType, ProductStatus } from '@prisma/client';
+import { ProductImageInputDto } from '../product-image/dto/product-image-input.dto';
+import { Type } from 'class-transformer';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -17,16 +20,6 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @IsPositive()
-  price?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  stock?: number;
 
   @IsOptional()
   @IsInt()
@@ -48,4 +41,10 @@ export class UpdateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ProductImageInputDto)
+  @ArrayMaxSize(10) // por ejemplo, max 10  imágenes
+  images?: ProductImageInputDto[];
 }

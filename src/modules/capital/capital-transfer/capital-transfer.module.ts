@@ -4,6 +4,7 @@ import { CapitalTransferController } from './capital-transfer.controller';
 
 @Module({
   providers: [CapitalTransferService],
-  controllers: [CapitalTransferController]
+  controllers: [CapitalTransferController],
+  exports: [CapitalTransferService],
 })
 export class CapitalTransferModule {}

@@ -1,10 +1,19 @@
-import { CapitalType, CapitalSourceType } from '@prisma/client';
-import { IsEnum, IsNumberString, IsOptional } from 'class-validator';
+import {
+  CapitalType,
+  CapitalSourceType,
+  CapitalAccountName,
+} from '@prisma/client';
+import {
+  IsDateString,
+  IsEnum,
+  IsNumberString,
+  IsOptional,
+} from 'class-validator';
 
 export class FilterCapitalTransactionDto {
   @IsOptional()
-  @IsNumberString()
-  accountId?: number;
+  @IsEnum(CapitalAccountName)
+  account?: CapitalAccountName;
 
   @IsOptional()
   @IsEnum(CapitalType)
@@ -21,4 +30,12 @@ export class FilterCapitalTransactionDto {
   @IsOptional()
   @IsNumberString()
   limit?: number;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }

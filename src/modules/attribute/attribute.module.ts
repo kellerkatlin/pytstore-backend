@@ -6,6 +6,6 @@ import { AttributeValueModule } from './attribute-value/attribute-value.module';
 @Module({
   controllers: [AttributeController],
   providers: [AttributeService],
-  imports: [AttributeValueModule]
+  imports: [AttributeValueModule],
 })
 export class AttributeModule {}

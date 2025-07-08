@@ -5,8 +5,9 @@ import {
   Get,
   Param,
   ParseIntPipe,
-  Patch,
   Post,
+  Put,
+  Query,
 } from '@nestjs/common';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { AttributeService } from './attribute.service';
@@ -24,16 +25,22 @@ export class AttributeController {
   }
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('search') search = '',
+    @Query('sortBy') sortBy = 'id',
+    @Query('order') order: 'asc' | 'desc' = 'desc',
+  ) {
+    return this.service.findAll(+page, +limit, search, sortBy, order);
   }
 
-  @Get('category/:categoryId')
-  findByCategory(@Param('categoryId', ParseIntPipe) id: number) {
-    return this.service.findByCategory(id);
+  @Get(':id')
+  findById(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findById(id);
   }
 
-  @Patch(':id')
+  @Put(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAttributeDto,
