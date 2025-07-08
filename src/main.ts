@@ -1,3 +1,4 @@
+import { Express } from './../node_modules/@types/express-serve-static-core/index.d';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -8,6 +9,10 @@ import { HttpExceptionFilter } from './common/filters/htpp-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const expressApp = app.getHttpAdapter().getInstance() as Express;
+  expressApp.set('trust proxy', 1);
+
   app.enableCors({
     origin: ['http://localhost:4200', 'https://admin.pyt-store.com'],
     credentials: true,
