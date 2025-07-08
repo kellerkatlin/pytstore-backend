@@ -9,7 +9,7 @@ import { HttpExceptionFilter } from './common/filters/htpp-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: 'http://localhost:4200',
+    origin: ['http://localhost:4200', 'https://admin.pyt-store.com'],
     credentials: true,
   });
   app.useGlobalInterceptors(
@@ -21,6 +21,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
+
 
   // Banner simple sin chalk
   console.clear();
