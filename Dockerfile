@@ -3,15 +3,15 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Instala solo los paquetes necesarios para construir
+# Instala dependencias para construir
 COPY package*.json ./
 RUN npm install
 
-# Copiar prisma schema y generar cliente antes de compilar
+# Copiar Prisma schema y generar cliente
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copia todo el código fuente y compila
+# Copiar el resto del código y compilar
 COPY . .
 RUN npm run build
 
@@ -20,15 +20,20 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Copia solo lo necesario desde la etapa de construcción
+# Instala solo dependencias necesarias en producción
 COPY package*.json ./
 RUN npm install --production
 
-# Copia los archivos ya compilados
+# Copia archivos necesarios desde el builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
 
-# Expone el puerto (ajusta si tu app usa otro)
+# Variables necesarias
+ENV NODE_ENV=production
+
+# Expone el puerto de la app
 EXPOSE 3000
 
-# Comando para iniciar la app
-CMD ["node", "dist/main"]
+# Ejecuta migraciones y luego arranca la app
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
