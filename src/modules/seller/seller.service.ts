@@ -239,6 +239,15 @@ export class SellerService {
       }
     }
 
+    const existingByPhone = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+
+    if (existingByPhone) {
+      throw new ConflictException(
+        'Ya existe un usuario con este número de teléfono',
+      );
+    }
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const referralCode = await this.referralService.generateReferralCode(
       dto.name,

@@ -35,10 +35,10 @@ export class CreateSellerDto {
     message: 'El teléfono debe tener exactamente 9 dígitos',
   })
   phone?: string;
-  @IsString()
   @IsOptional()
-  @Matches(/^\d{11}$/, {
-    message: 'El RUC debe tener exactamente 11 dígitos',
+  @IsString()
+  @Matches(/^\d{8}$|^\d{11}$/, {
+    message: 'El documento debe tener 8 (DNI) o 11 (RUC) dígitos',
   })
   ruc?: string;
 
