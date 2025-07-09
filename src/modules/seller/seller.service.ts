@@ -230,11 +230,13 @@ export class SellerService {
     }
 
     // Validar que no exista un vendedor con el mismo RUC
-    const existingSeller = await this.prisma.seller.findUnique({
-      where: { ruc: dto.ruc },
-    });
-    if (existingSeller) {
-      throw new ConflictException('Ya existe un vendedor con este RUC');
+    if (dto.ruc) {
+      const existingSeller = await this.prisma.seller.findUnique({
+        where: { ruc: dto.ruc },
+      });
+      if (existingSeller) {
+        throw new ConflictException('Ya existe un vendedor con este RUC');
+      }
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
