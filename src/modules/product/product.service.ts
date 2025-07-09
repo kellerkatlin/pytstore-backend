@@ -20,6 +20,8 @@ export class ProductService {
     description: true,
     commissionType: true,
     commissionValue: true,
+    gainType: true,
+    gainValue: true,
     categoryId: true,
     brandId: true,
     status: true,

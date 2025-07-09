@@ -170,7 +170,7 @@ model ProductPriceHistory {
 model Product {
   id              Int                 @id @default(autoincrement())
   title           String
-  description     String
+  description     String?
   categoryId      Int
   brandId         Int
   isActive        Boolean             @default(true)
@@ -359,6 +359,7 @@ model Purchase {
   id           Int            @id @default(autoincrement())
   providerName String
   invoiceCode  String         @unique
+  documentUrl  String?
   purchaseDate DateTime
   createdAt    DateTime       @default(now())
   items        PurchaseItem[]

@@ -178,6 +178,7 @@ export class PurchaseService {
           providerName: dto.providerName,
           invoiceCode: dto.invoiceCode,
           purchaseDate: new Date(dto.purchaseDate),
+          documentUrl: dto.documentUrl,
         },
       });
 
