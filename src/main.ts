@@ -1,4 +1,4 @@
-import { Express } from './../node_modules/@types/express-serve-static-core/index.d';
+import { Express } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -26,7 +26,6 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-
 
   // Banner simple sin chalk
   console.clear();
