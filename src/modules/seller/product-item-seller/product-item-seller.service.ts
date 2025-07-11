@@ -148,6 +148,7 @@ export class ProductItemSellerService {
         productTitle: item.product.title,
         brandName: item.product.brand.name,
         serialCode: item.serialCode,
+        status: item.status,
         salePrice,
         profit,
         createdAt: item.createdAt,
