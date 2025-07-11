@@ -34,6 +34,6 @@ async function bootstrap() {
   console.log(`🟢  Servidor corriendo en: http://localhost:${port}`);
   console.log(`🌱  Entorno: ${process.env.NODE_ENV ?? 'development'}`);
   console.log(`🕒  Hora de inicio: ${new Date().toLocaleString()}`);
-  console.log('='.repeat(60) + '\n');
+  console.log('='.repeat(60) + '\n'); 
 }
 bootstrap();
