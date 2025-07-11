@@ -168,8 +168,13 @@ export class ProductItemSellerService {
       where: { id },
       include: {
         product: {
-          include: {
+          select: {
             brand: true,
+            commissionValue: true,
+            commissionType: true,
+            gainValue: true,
+            gainType: true,
+            title: true,
           },
         },
         purchaseItem: {
@@ -188,21 +193,39 @@ export class ProductItemSellerService {
 
     const images = await this.productItemImageService.findRawByItem(id);
 
+    // ✅ Obtener y sumar gastos adicionales
+    const extraCosts = await this.prisma.productCostDetail.findMany({
+      where: {
+        productItemId: id, // ← esto estaba mal: antes usabas `id` directamente
+        origin: 'PURCHASE',
+      },
+    });
+    const extraCostTotal = extraCosts.reduce(
+      (sum, cost) => sum + cost.amount,
+      0,
+    );
+
+    const baseCost = item.purchaseItem?.unitCost ?? 0;
+    const unitCost = baseCost + extraCostTotal;
+
+    const salePrice = item.salePrice ?? 0;
+
+    // ✅ Calcular utilidad real
+    const isGravado = (item.taxType ?? 'GRAVADO') === 'GRAVADO';
+    const baseVenta = isGravado ? salePrice / 1.18 : salePrice;
+    const utilidad = baseVenta - unitCost;
+
     const commissionValue =
       item.commissionValue ?? item.product.commissionValue;
     const commissionType = item.commissionType ?? item.product.commissionType;
-    const costoUnitario = item.purchaseItem?.unitCost ?? 0;
+
     let profit: number | null = null;
-
-    if (item.salePrice != null && costoUnitario != null) {
-      const utilidad = item.salePrice - costoUnitario;
-
-      if (commissionType === 'PERCENT') {
-        profit = (utilidad * commissionValue) / 100;
-      } else if (commissionType === 'FIXED') {
-        profit = commissionValue;
-      }
+    if (commissionType === 'PERCENT') {
+      profit = (utilidad * commissionValue) / 100;
+    } else if (commissionType === 'FIXED') {
+      profit = commissionValue;
     }
+
     const attributes = item.attributes.map((attr) => ({
       attribute: attr.attribute.name,
       value: attr.value.value,
