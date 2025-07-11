@@ -144,16 +144,28 @@ export class CapitalService {
       include: { transactions: true },
     });
 
-    const capitalSummary = accounts.map((account) => {
-      const total = account.transactions.reduce((acc, tx) => {
-        const sign = ['INJECTION', 'SALE_PROFIT'].includes(tx.type) ? 1 : -1;
-        return acc + sign * tx.amount;
-      }, 0);
-      return {
-        account: account.name,
-        total,
-      };
-    });
+    const capitalSummary = await Promise.all(
+      accounts.map(async (account) => {
+        const [inAgg, outAgg] = await Promise.all([
+          this.prisma.capitalTransaction.aggregate({
+            _sum: { amount: true },
+            where: { accountId: account.id },
+          }),
+          this.prisma.capitalTransaction.aggregate({
+            _sum: { amount: true },
+            where: { originAccountId: account.id },
+          }),
+        ]);
+
+        const totalIn = inAgg._sum.amount ?? 0;
+        const totalOut = outAgg._sum.amount ?? 0;
+
+        return {
+          account: account.name,
+          total: totalIn - totalOut,
+        };
+      }),
+    );
 
     // Total histórico de ventas (acumulado)
     const totalSales = await this.prisma.capitalTransaction.aggregate({
@@ -161,10 +173,29 @@ export class CapitalService {
       where: { type: 'SALE_PROFIT' },
     });
 
+    // Total capital inyectado (entradas donde originAccountId es null y tipo es CAPITAL_INJECTION)
+    const totalCapitalInjectionAgg =
+      await this.prisma.capitalTransaction.aggregate({
+        _sum: { amount: true },
+        where: {
+          type: 'INJECTION',
+          originAccountId: null, // aseguramos que es entrada
+        },
+      });
+    const totalCapitalInjection = totalCapitalInjectionAgg._sum.amount ?? 0;
+
+    // Obtener saldo actual en cuenta CASH
+    const cashAccount = capitalSummary.find((a) => a.account === 'CASH');
+    const cashTotal = cashAccount?.total ?? 0;
+
+    // Ganancia neta real: lo que inyecté - lo que aún tengo en caja
+    const netProfit = cashTotal - totalCapitalInjection;
     return ok(
       {
         capital: capitalSummary,
         totalSales: totalSales._sum.amount ?? 0,
+        capitalInjection: totalCapitalInjection,
+        netProfit, // ganancia neta acumulada
       },
       'Resumen financiero completo',
     );

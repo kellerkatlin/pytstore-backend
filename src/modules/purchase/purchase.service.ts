@@ -6,142 +6,109 @@ import {
 import { PrismaService } from 'src/common/prisma/prisma.service';
 import { CreatePurchaseProductUniqueDto } from './dto/create-purchase-product-unique.dto';
 import { created } from 'src/common/helpers/response.helper';
-import { CapitalAccountName } from '@prisma/client';
+import { CapitalAccountName, Prisma } from '@prisma/client';
+import { CreatePurchaseDto } from './dto/create-purchase.dto';
 
 @Injectable()
 export class PurchaseService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // async create(dto: CreatePurchaseDto) {
-  //   return this.prisma.$transaction(async (tx) => {
-  //     const purchase = await tx.purchase.create({
-  //       data: {
-  //         providerName: dto.providerName,
-  //         invoiceCode: dto.invoiceCode,
-  //         purchaseDate: new Date(dto.purchaseDate),
-  //       },
-  //     });
+  private async calculateCashBalance(
+    tx: Prisma.TransactionClient,
+  ): Promise<number> {
+    const cashAccount = await tx.capitalAccount.findUnique({
+      where: { name: 'CASH' },
+      include: { transactions: true },
+    });
+    if (!cashAccount) throw new NotFoundException('Cuenta CASH no encontrada');
 
-  //     for (const item of dto.items) {
-  //       const product = await tx.product.findUnique({
-  //         where: { id: item.productId },
-  //       });
+    return cashAccount.transactions.reduce((acc, t) => {
+      const sign = ['INJECTION', 'SALE_PROFIT', 'TRANSFER_IN'].includes(t.type)
+        ? 1
+        : -1;
+      return acc + t.amount * sign;
+    }, 0);
+  }
 
-  //       if (!item.items?.length && !item.variantId) {
-  //         throw new BadRequestException(
-  //           `El producto ${item.productId} no tiene ni items únicos ni variante. Se requiere al menos uno.`,
-  //         );
-  //       }
+  async createForVariantsOrMassive(dto: CreatePurchaseDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const totalGasto = dto.items.reduce(
+        (acc, i) => acc + i.unitCost * i.quantity,
+        0,
+      );
 
-  //       if (!product) throw new NotFoundException('Producto no encontrado');
+      const cashId = await this.getAccountIdByName('CASH');
+      const inventoryId = await this.getAccountIdByName('INVENTORY');
 
-  //       const purchaseItem = await tx.purchaseItem.create({
-  //         data: {
-  //           purchaseId: purchase.id,
-  //           productId: item.productId,
-  //           unitCost: item.unitCost,
-  //           quantity: item.quantity,
-  //           status: 'RECEIVED',
-  //         },
-  //       });
+      const saldo = await this.calculateCashBalance(tx);
+      if (totalGasto > saldo) {
+        throw new BadRequestException('Fondos insuficientes en caja');
+      }
 
-  //       // 🔹 Caso 1: Productos únicos (serializados)
-  //       if (item.items?.length) {
-  //         if (item.items.length !== item.quantity) {
-  //           throw new Error(
-  //             `Cantidad de items únicos (${item.items.length}) no coincide con quantity (${item.quantity}) para el producto ${item.productId}`,
-  //           );
-  //         }
+      const purchase = await tx.purchase.create({
+        data: {
+          providerName: dto.providerName,
+          invoiceCode: dto.invoiceCode,
+          purchaseDate: new Date(dto.purchaseDate),
+          documentUrl: dto.documentUrl,
+        },
+      });
 
-  //         for (const single of item.items) {
-  //           const existingItem = await tx.productItem.findUnique({
-  //             where: { serialCode: single.serialCode },
-  //           });
+      for (const item of dto.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+        });
 
-  //           if (!existingItem) {
-  //             throw new NotFoundException(
-  //               `El producto único con serial ${single.serialCode} no existe`,
-  //             );
-  //           }
-  //           if (existingItem.productId !== item.productId) {
-  //             throw new BadRequestException(
-  //               `El item con serial ${single.serialCode} no pertenece al producto ${item.productId}`,
-  //             );
-  //           }
+        if (!product) throw new NotFoundException('Producto no encontrado');
 
-  //           await tx.productItem.update({
-  //             where: { id: existingItem.id },
-  //             data: {
-  //               purchaseItemId: purchaseItem.id,
-  //               salePrice: single.salePrice,
-  //               status: 'IN_STOCK',
-  //             },
-  //           });
+        const purchaseItem = await tx.purchaseItem.create({
+          data: {
+            productId: item.productId,
+            variantId: item.variantId,
+            purchaseId: purchase.id,
+            quantity: item.quantity,
+            unitCost: item.unitCost,
+            status: 'RECEIVED',
+          },
+        });
 
-  //           await tx.inventoryMovement.create({
-  //             data: {
-  //               productId: item.productId,
-  //               sourceType: 'PURCHASE',
-  //               sourceId: purchaseItem.id,
-  //               quantity: 1,
-  //               direction: 'IN',
-  //               reason: `Ingreso de item único por compra ${dto.invoiceCode}`,
-  //             },
-  //           });
-  //         }
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: {
+              stock: { increment: item.quantity },
+            },
+          });
+        }
 
-  //         continue; // no actualizar stock general
-  //       }
+        await tx.inventoryMovement.create({
+          data: {
+            productId: item.productId,
+            variantId: item.variantId,
+            sourceType: 'PURCHASE',
+            sourceId: purchaseItem.id,
+            quantity: item.quantity,
+            direction: 'IN',
+            reason: `Ingreso por compra (${dto.invoiceCode})`,
+          },
+        });
 
-  //       // 🔹 Caso 2: Productos con variantes
-  //       if (item.variantId) {
-  //         const variant = await tx.productVariant.findUnique({
-  //           where: { id: item.variantId },
-  //         });
+        await tx.capitalTransaction.create({
+          data: {
+            amount: item.unitCost * item.quantity,
+            type: 'TRANSFER_OUT',
+            referenceType: 'PURCHASE',
+            referenceId: purchase.id,
+            description: `Compra de stock (${item.quantity})`,
+            originAccountId: cashId,
+            accountId: inventoryId,
+          },
+        });
+      }
 
-  //         if (!variant || variant.productId !== item.productId) {
-  //           throw new BadRequestException(
-  //             `La variante ${item.variantId} no corresponde al producto ${item.productId}`,
-  //           );
-  //         }
-
-  //         await tx.productVariant.update({
-  //           where: { id: item.variantId },
-  //           data: {
-  //             stock: { increment: item.quantity },
-  //           },
-  //         });
-
-  //         await tx.inventoryMovement.create({
-  //           data: {
-  //             productId: item.productId,
-  //             variantId: item.variantId,
-  //             sourceType: 'PURCHASE',
-  //             sourceId: purchaseItem.id,
-  //             quantity: item.quantity,
-  //             direction: 'IN',
-  //             reason: `Ingreso de variante por compra ${dto.invoiceCode}`,
-  //           },
-  //         });
-
-  //         continue;
-  //       }
-
-  //       await tx.inventoryMovement.create({
-  //         data: {
-  //           productId: item.productId,
-  //           sourceType: 'PURCHASE',
-  //           sourceId: purchaseItem.id,
-  //           quantity: item.quantity,
-  //           direction: 'IN',
-  //           reason: `Ingreso por compra ${dto.invoiceCode}`,
-  //         },
-  //       });
-  //     }
-
-  //     return purchase;
-  //   });
-  // }
+      return created(purchase, 'Compra de variantes registrada');
+    });
+  }
 
   async createForUniqueItems(dto: CreatePurchaseProductUniqueDto) {
     return this.prisma.$transaction(async (tx) => {

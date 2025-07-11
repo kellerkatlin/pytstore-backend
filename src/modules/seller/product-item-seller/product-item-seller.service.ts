@@ -27,6 +27,7 @@ export class ProductItemSellerService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.productItem.findMany({
         where: {
+          status: { in: ['IN_STOCK', 'ORDERED'] },
           AND: [
             { product: { isActive: true, status: 'ACTIVE' } },
             {
@@ -147,6 +148,7 @@ export class ProductItemSellerService {
         productTitle: item.product.title,
         brandName: item.product.brand.name,
         serialCode: item.serialCode,
+        status: item.status,
         salePrice,
         profit,
         createdAt: item.createdAt,

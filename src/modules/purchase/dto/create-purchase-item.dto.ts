@@ -1,18 +1,13 @@
-import { IsArray, IsNumber, IsOptional, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-import { CreateProductItemInputDto } from './create-product-item-input.dto';
+import { IsNumber, IsOptional } from 'class-validator';
 
 export class CreatePurchaseItemDto {
   @IsNumber() unitCost: number;
+
+  @IsNumber()
+  productId: number;
   @IsNumber() quantity: number;
 
   @IsOptional()
   @IsNumber()
   variantId?: number;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => CreateProductItemInputDto)
-  items?: CreateProductItemInputDto[];
 }
