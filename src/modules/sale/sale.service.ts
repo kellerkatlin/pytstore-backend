@@ -25,6 +25,16 @@ export class SaleService {
     return { base, igv };
   }
 
+  private getTaxType(item: {
+    product: { taxType: string };
+    variant?: { taxType: string | null };
+    productItem?: { taxType: string | null };
+  }): string {
+    return (
+      item.productItem?.taxType ?? item.variant?.taxType ?? item.product.taxType
+    );
+  }
+
   private async registerCommission(
     tx: Prisma.TransactionClient,
     sale: { id: number; totalAmount: number; profitTotal: number },
@@ -458,7 +468,8 @@ export class SaleService {
         (sum, cost) => sum + cost.amount,
         0,
       );
-      const adjustedCostTotal = sale.costTotal + totalExtraCost;
+
+      const adjustedCostTotal = sale.costTotal;
       let totalCommission = 0;
 
       for (const item of sale.saleItems) {
@@ -469,10 +480,11 @@ export class SaleService {
         );
 
         const total = item.totalPrice;
-        const isGravado =
-          item.productItem?.taxType === 'GRAVADO' ||
-          item.variant?.taxType === 'GRAVADO' ||
-          item.product.taxType === 'GRAVADO';
+        const taxType =
+          item.productItem?.taxType ??
+          item.variant?.taxType ??
+          item.product.taxType;
+        const isGravado = taxType === 'GRAVADO';
 
         const { base: baseWithoutIgv } = this.extractIgv(total, isGravado);
 
@@ -617,14 +629,16 @@ export class SaleService {
       return ok('Venta rechazada y stock revertido');
     });
   }
+
   async searchItems(params: SearchSaleItemsDto) {
     const { search = '', page = 1, limit = 10 } = params;
 
     const isNumeric = !isNaN(Number(search));
     const searchNumber = Number(search);
     const skip = (page - 1) * limit;
-    const fetchLimit = limit * 2; // margen para luego filtrar y cortar
+    const fetchLimit = limit * 2;
 
+    // === Buscar productos únicos ===
     const [uniqueItems, uniqueTotal] = await this.prisma.$transaction([
       this.prisma.productItem.findMany({
         where: {
@@ -646,6 +660,7 @@ export class SaleService {
         },
         include: {
           product: true,
+          purchaseItem: { select: { unitCost: true } },
           attributes: {
             include: {
               attribute: true,
@@ -677,6 +692,7 @@ export class SaleService {
       }),
     ]);
 
+    // === Buscar variantes ===
     const [variantItems, variantTotal] = await this.prisma.$transaction([
       this.prisma.productVariant.findMany({
         where: {
@@ -704,10 +720,7 @@ export class SaleService {
               value: true,
             },
           },
-          images: {
-            where: { isPrimary: true },
-            take: 1,
-          },
+          images: { where: { isPrimary: true }, take: 1 },
         },
         take: fetchLimit,
       }),
@@ -715,10 +728,7 @@ export class SaleService {
         where: {
           status: 'ACTIVE',
           stock: { gt: 0 },
-          product: {
-            isActive: true,
-            status: 'ACTIVE',
-          },
+          product: { isActive: true, status: 'ACTIVE' },
           OR: [
             { sku: { contains: search, mode: 'insensitive' } },
             { product: { title: { contains: search, mode: 'insensitive' } } },
@@ -735,22 +745,55 @@ export class SaleService {
       }),
     ]);
 
+    // === Obtener costos adicionales de productos únicos ===
+    const productItemIds = uniqueItems.map((i) => i.id);
+    const extraCosts = await this.prisma.productCostDetail.findMany({
+      where: {
+        productItemId: { in: productItemIds },
+        origin: 'PURCHASE',
+      },
+    });
+
+    const costMap = new Map<number, number>();
+    for (const cost of extraCosts) {
+      const current = costMap.get(cost.productItemId!) ?? 0;
+      costMap.set(cost.productItemId!, current + cost.amount);
+    }
+
+    // === Construir respuesta final ===
     const allItems = [
-      ...uniqueItems.map((item) => ({
-        id: item.id,
-        type: 'UNIQUE',
-        productId: item.productId,
-        productItemId: item.id,
-        name: item.product.title,
-        imageUrl: item.images[0]?.imageUrl ?? null,
-        serialCode: item.serialCode,
-        salePrice: item.salePrice,
-        stock: 1,
-        attributes: item.attributes.map((a) => ({
-          name: a.attribute.name,
-          value: a.value.value,
-        })),
-      })),
+      ...uniqueItems.map((item) => {
+        const baseCost = item.purchaseItem?.unitCost ?? 0;
+        const extra = costMap.get(item.id) ?? 0;
+        const unitCost = baseCost + extra;
+
+        const gainType = item.gainType ?? item.product.gainType;
+        const gainValue = item.gainValue ?? item.product.gainValue;
+
+        let salePrice = item.salePrice ?? 0;
+        if (gainType && gainValue != null) {
+          const utilidad =
+            gainType === 'PERCENT' ? (unitCost * gainValue) / 100 : gainValue;
+          salePrice = unitCost + utilidad;
+        }
+
+        return {
+          id: item.id,
+          type: 'UNIQUE',
+          productId: item.productId,
+          productItemId: item.id,
+          name: item.product.title,
+          imageUrl: item.images[0]?.imageUrl ?? null,
+          serialCode: item.serialCode,
+          salePrice,
+          unitCost,
+          stock: 1,
+          attributes: item.attributes.map((a) => ({
+            name: a.attribute.name,
+            value: a.value.value,
+          })),
+        };
+      }),
       ...variantItems.map((variant) => ({
         id: variant.id,
         type: 'VARIANT',
@@ -768,9 +811,8 @@ export class SaleService {
       })),
     ];
 
-    // aplicar paginación combinada
     const paginatedItems = allItems
-      .sort((a, b) => a.name.localeCompare(b.name)) // puedes cambiar por createdAt u otro criterio
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(skip, skip + limit);
 
     return paginated(

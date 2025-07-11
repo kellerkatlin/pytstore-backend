@@ -371,12 +371,14 @@ model PurchaseItem {
   productId    Int
   unitCost     Float
   quantity     Int
+  variantId    Int?
   createdAt    DateTime            @default(now())
   status       PurchaseItemStatus
   costDetails  ProductCostDetail[]
   productItems ProductItem[]
   product      Product             @relation(fields: [productId], references: [id])
   purchase     Purchase            @relation(fields: [purchaseId], references: [id])
+  variant      ProductVariant?     @relation(fields: [variantId], references: [id])
   saleItems    SaleItem[]
 }
 
@@ -708,12 +710,11 @@ model ProductTag {
 }
 
 model ProductVariant {
-  id        Int                @id @default(autoincrement())
-  productId Int
-  sku       String             @unique
-  price     Float
-  taxType   TaxAffectationType @default(GRAVADO)
-
+  id              Int                   @id @default(autoincrement())
+  productId       Int
+  sku             String                @unique
+  price           Float
+  taxType         TaxAffectationType    @default(GRAVADO)
   stock           Int
   images          ProductVariantImage[]
   status          ProductStatus         @default(ACTIVE)
@@ -722,10 +723,12 @@ model ProductVariant {
   product         Product               @relation(fields: [productId], references: [id])
   salesItems      SaleItem[]
   commissionValue Float?
-  commissionType  CommissionType?
-  gainType        CommissionType?
-  gainValue       Float?
-  attributes      VariantAttribute[]
+  purchaseItem    PurchaseItem[]
+
+  commissionType CommissionType?
+  gainType       CommissionType?
+  gainValue      Float?
+  attributes     VariantAttribute[]
 }
 
 model VariantAttribute {
